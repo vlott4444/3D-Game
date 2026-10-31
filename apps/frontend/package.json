@@ -10,10 +10,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@colyseus/sdk": "^0.18.1"
+    "@colyseus/sdk": "^0.18.1",
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@3d-game/backend": "*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "typescript": "^5.0.4",
     "vite": "^8.2.1"
   }
