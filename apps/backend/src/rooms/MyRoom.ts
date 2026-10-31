@@ -3,7 +3,6 @@ import { MyRoomState, Player, MoveInput } from "./schema/MyRoomState.js";
 import { stepEntity } from "../shared/movement.js";
 import { TICK_RATE, ARENA_WIDTH, ARENA_HEIGHT } from "../shared/constants.js";
 
-// 🔥 NEW: Импортируем наши менеджеры, базу данных и авторизацию
 import { ChunkManager } from '../world/ChunkManager.js';
 import { InterestManager } from '../world/InterestManager.js';
 import { saveState } from '../database/players.repo.js';
