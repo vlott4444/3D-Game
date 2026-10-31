@@ -2,7 +2,7 @@ import { Room, Client, CloseCode, type StepContext } from "colyseus";
 import { MyRoomState, Player, MoveInput } from "./schema/MyRoomState.js";
 import { stepEntity } from "../shared/movement.js";
 import { TICK_RATE, ARENA_WIDTH, ARENA_HEIGHT } from "../shared/constants.js";
-
+import { agentService } from "../agents/AgentService.js";
 import { ChunkManager } from '../world/ChunkManager.js';
 import { InterestManager } from '../world/InterestManager.js';
 import { saveState } from '../database/players.repo.js';
@@ -40,14 +40,21 @@ export class MyRoom extends Room<{ state: MyRoomState, input: MoveInput }> {
   messages = {
 
 
-    chat: (client: Client, message: { text: string; target?: string }) => {
-      if (message.target) {
-        client.send('agent_reply', {
-          agentId: message.target,
-          text: `[echo] ${message.text}`
+    chat: async (client: Client, message: { text: string; target?: string }) => {
+      if (!message.target) {
+        this.broadcast("chat", { from: client.sessionId, text: message.text });
+        return;
+      }
+      try {
+        const { text } = await agentService.reply({
+          // sessionId как запасной вариант, пока нет логина
+          playerId: client.auth?.playerId ?? client.sessionId,
+          npcId: message.target,
+          message: message.text,
         });
-      } else {
-        this.broadcast('chat', { from: client.sessionId, text: message.text });
+        client.send("agent_reply", { agentId: message.target, text });
+      } catch (e) {
+        client.send("agent_reply", { agentId: message.target, text: "Эйнштейн сейчас не отвечает.", error: true });
       }
     },
   };

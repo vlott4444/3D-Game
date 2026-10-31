@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 
 import GameScene from "./game/GameScene";
@@ -14,6 +13,9 @@ export default function App() {
   // Состояние NPC и диалога
   const [nearNPC, setNearNPC] = useState(false);
   const [dialogueOpen, setDialogueOpen] = useState(false);
+  const [gameRoom, setGameRoom] = useState<
+    Awaited<ReturnType<typeof connectToGame>> | null
+  >(null);
 
   // -----------------------------
   // Подключение к Colyseus
@@ -36,10 +38,9 @@ export default function App() {
         }
 
         activeRoom = room;
+        setGameRoom(room);
 
-        setStatus(
-          `Connected as ${room.sessionId}`
-        );
+        setStatus(`Connected as ${room.sessionId}`);
 
         room.onStateChange((state) => {
           if (disposed) return;
@@ -54,13 +55,11 @@ export default function App() {
         room.onLeave(() => {
           if (!disposed) {
             setStatus("Disconnected");
+            setGameRoom(null);
           }
         });
       } catch (error) {
-        console.error(
-          "Colyseus connection error:",
-          error
-        );
+        console.error("Colyseus connection error:", error);
 
         if (!disposed) {
           setStatus("Connection failed");
@@ -109,16 +108,10 @@ export default function App() {
       }
     }
 
-    window.addEventListener(
-      "keydown",
-      handleEscape
-    );
+    window.addEventListener("keydown", handleEscape);
 
     return () => {
-      window.removeEventListener(
-        "keydown",
-        handleEscape
-      );
+      window.removeEventListener("keydown", handleEscape);
     };
   }, [dialogueOpen]);
 
@@ -140,24 +133,17 @@ export default function App() {
       />
 
       {/* Информация об игре */}
-      <div
-      >
+      <div>
         <div>{status}</div>
         <div>Players: {playersCount}</div>
-
-
       </div>
 
       {/* Подсказка рядом с Эйнштейном */}
-      {nearNPC && !dialogueOpen && (
-        <InteractionHint />
-      )}
+      {nearNPC && !dialogueOpen && <InteractionHint />}
 
       {/* Окно диалога */}
       {dialogueOpen && (
-        <DialoguePanel
-          onClose={closeDialogue}
-        />
+        <DialoguePanel room={gameRoom} onClose={closeDialogue} />
       )}
     </div>
   );

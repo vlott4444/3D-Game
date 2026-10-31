@@ -1,0 +1,7 @@
+FROM ./qwen2.5-3b.gguf
+TEMPLATE """{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"

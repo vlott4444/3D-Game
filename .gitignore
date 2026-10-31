@@ -3,3 +3,6 @@ build
 .colyseus-cloud.json
 .devmode.json
 dist
+*.gguf
+*.gguf
+*.gguf

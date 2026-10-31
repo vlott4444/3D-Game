@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 type Message = {
@@ -8,11 +7,14 @@ type Message = {
 };
 
 type Props = {
+  // any, потому что сообщения agent_reply нет в типах сервера
+  room: any;
   onClose: () => void;
 };
 
-export default function DialoguePanel({ onClose }: Props) {
+export default function DialoguePanel({ room, onClose }: Props) {
   const [message, setMessage] = useState("");
+  const [waiting, setWaiting] = useState(false);
   const [history, setHistory] = useState<Message[]>([
     {
       role: "npc",
@@ -20,22 +22,36 @@ export default function DialoguePanel({ onClose }: Props) {
     },
   ]);
 
+  // Ответ нейросети приходит от сервера сообщением agent_reply
+  useEffect(() => {
+    if (!room) return;
+
+    const off = room.onMessage(
+      "agent_reply",
+      (data: { text: string }) => {
+        setHistory((previous) => [
+          ...previous,
+          { role: "npc", text: data.text },
+        ]);
+        setWaiting(false);
+      }
+    );
+
+    return () => {
+      if (typeof off === "function") off();
+    };
+  }, [room]);
+
   function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const text = message.trim();
-    if (!text) return;
+    if (!text || !room || waiting) return;
 
-    // Временный ответ — позже подключим Ollama через backend
-    const reply = text.toLowerCase().includes("время")
-      ? "Время относительно! Представь два поезда, движущихся с разными скоростями..."
-      : "Интересный вопрос! Давай исследуем его вместе.";
+    setHistory((previous) => [...previous, { role: "player", text }]);
+    setWaiting(true);
 
-    setHistory((previous) => [
-      ...previous,
-      { role: "player", text },
-      { role: "npc", text: reply },
-    ]);
+    room.send("chat", { text, target: "einstein" });
 
     setMessage("");
   }
@@ -66,7 +82,7 @@ export default function DialoguePanel({ onClose }: Props) {
           alignItems: "center",
         }}
       >
-        <h3 style={{ margin: 0 }}>Ноунейм Ноунеймов</h3>
+        <h3 style={{ margin: 0 }}>Альберт Эйнштейн</h3>
 
         <button onClick={onClose} type="button">
           ✕
@@ -93,12 +109,16 @@ export default function DialoguePanel({ onClose }: Props) {
             }}
           >
             <strong>
-              {item.role === "player" ? "Ты" : "ноунейм"}
+              {item.role === "player" ? "Ты" : "Эйнштейн"}
             </strong>
 
             <div style={{ marginTop: 6 }}>{item.text}</div>
           </div>
         ))}
+
+        {waiting && (
+          <div style={{ opacity: 0.7 }}>Эйнштейн думает…</div>
+        )}
       </div>
 
       <form
@@ -118,7 +138,9 @@ export default function DialoguePanel({ onClose }: Props) {
           }}
         />
 
-        <button type="submit">Отправить</button>
+        <button type="submit" disabled={waiting || !room}>
+          Отправить
+        </button>
       </form>
     </div>
   );

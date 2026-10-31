@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
-import { agentService } from "../../AgentService.js";
+import { agentService } from "../AgentService.js";
 
 async function main(): Promise<void> {
   const playerId = process.argv[2] || "player-1";
