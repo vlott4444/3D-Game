@@ -1,4 +1,4 @@
-import { getDb } from './db.js';
+import { getDb } from "./db.js";
 
 export interface PlayerRow {
   id: string;
@@ -8,22 +8,50 @@ export interface PlayerRow {
   pos_x: number;
   pos_y: number;
   rot_y: number;
+  height: number;
+  last_seen: number | null;
 }
 
 export function findByUsername(username: string): PlayerRow | undefined {
-  return getDb().prepare(`SELECT * FROM players WHERE username = ?`).get(username) as PlayerRow | undefined;
+  return getDb()
+    .prepare(`SELECT * FROM players WHERE username = ?`)
+    .get(username) as unknown as PlayerRow | undefined;
 }
 
 export function findById(id: string): PlayerRow | undefined {
-  return getDb().prepare(`SELECT * FROM players WHERE id = ?`).get(id) as PlayerRow | undefined;
+  return getDb().prepare(`SELECT * FROM players WHERE id = ?`).get(id) as unknown as
+    PlayerRow | undefined;
 }
 
 export function createPlayer(id: string, username: string, passwordHash: string) {
-  getDb().prepare(`INSERT INTO players (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)`)
+  getDb()
+    .prepare(
+      `INSERT INTO players (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)`,
+    )
     .run(id, username, passwordHash, Date.now());
 }
 
-export function saveState(id: string, data: { roomId: string | null; posX: number; posY: number; rotY: number }) {
-  getDb().prepare(`UPDATE players SET room_id=?, pos_x=?, pos_y=?, rot_y=?, last_seen=? WHERE id=?`)
-    .run(data.roomId, data.posX, data.posY, data.rotY, Date.now(), id);
+export function saveState(
+  id: string,
+  data: {
+    roomId: string | null;
+    posX: number;
+    posY: number;
+    rotY: number;
+    height?: number;
+  },
+) {
+  getDb()
+    .prepare(
+      `UPDATE players SET room_id=?, pos_x=?, pos_y=?, rot_y=?, height=?, last_seen=? WHERE id=?`,
+    )
+    .run(
+      data.roomId,
+      data.posX,
+      data.posY,
+      data.rotY,
+      data.height ?? 1.18,
+      Date.now(),
+      id,
+    );
 }

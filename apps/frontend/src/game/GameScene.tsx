@@ -1,14 +1,19 @@
-
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Grid } from "@react-three/drei";
+import { cast } from "./npc/cast";
+import type { GameRoom } from "../network/GameConnection";
+import RemotePlayers from "./RemotePlayers";
 import { Physics } from "@react-three/rapier";
 
+import Visitor from "./npc/Visitor";
 import World from "./World";
+import RenderBudget from "./RenderBudget";
 import PlayerController from "./PlayerController";
 import NPC from "./npc/NPC";
 
 type Props = {
+  room: GameRoom;
+  initialPose: { x: number; z: number; height: number; rotY: number };
   dialogueOpen: boolean;
   nearNPC: boolean;
   onNearbyChange: (nearby: boolean) => void;
@@ -16,6 +21,8 @@ type Props = {
 };
 
 export default function GameScene({
+  room,
+  initialPose,
   dialogueOpen,
   nearNPC,
   onNearbyChange,
@@ -23,6 +30,8 @@ export default function GameScene({
 }: Props) {
   return (
     <Canvas
+      frameloop="demand"
+      dpr={[1, 1.25]}
       shadows
       camera={{
         position: [0, 5, 9],
@@ -33,14 +42,13 @@ export default function GameScene({
         height: "100%",
       }}
     >
+      <RenderBudget dialogueOpen={dialogueOpen} />
       {/* Цвет неба */}
-      <color
-        attach="background"
-        args={["#bde0fe"]}
-      />
+      <color attach="background" args={["#bccdc5"]} />
 
       {/* Основной свет */}
-      <ambientLight intensity={0.8} />
+      <fog attach="fog" args={["#bccdc5", 60, 145]} />
+      <ambientLight intensity={0.95} />
 
       <directionalLight
         position={[10, 15, 5]}
@@ -53,25 +61,22 @@ export default function GameScene({
         shadow-camera-bottom={-30}
       />
 
-      {/* Сетка на земле */}
-      <Grid
-        position={[0, 0.015, 0]}
-        args={[100, 100]}
-        sectionColor="#666666"
-        cellColor="#aaaaaa"
-        fadeDistance={50}
-      />
-
       <Suspense fallback={null}>
         <Physics gravity={[0, -14, 0]}>
           {/* Игровой мир */}
-          <World />
+          <World room={room} initialPose={initialPose} />
+          <Visitor room={room} />
 
           {/* NPC с анимациями */}
-          <NPC playerNearby={nearNPC} />
+          {cast.map((person) => (
+            <NPC key={person.id} person={person} playerNearby={nearNPC} />
+          ))}
+          <RemotePlayers room={room} />
 
           {/* Игрок и взаимодействие */}
           <PlayerController
+            room={room}
+            initialPose={initialPose}
             dialogueOpen={dialogueOpen}
             onNearbyChange={onNearbyChange}
             onInteract={onInteract}

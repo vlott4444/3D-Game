@@ -1,147 +1,180 @@
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
-
-type Message = {
-  role: "player" | "npc";
-  text: string;
-};
-
-type Props = {
-  // any, потому что сообщения agent_reply нет в типах сервера
-  room: any;
+import { useEffect, useRef, useState, type SubmitEvent } from "react";
+import type { GameRoom } from "../network/GameConnection";
+import { cast } from "../game/npc/cast";
+import type { VisitorState } from "../game/npc/Visitor";
+type Entry = { speaker: string; text: string; kind: string; npcId?: string };
+export default function DialoguePanel({
+  room,
+  open,
+  onClose,
+  nearNPC,
+}: {
+  room: GameRoom;
+  open: boolean;
   onClose: () => void;
-};
-
-export default function DialoguePanel({ room, onClose }: Props) {
+  nearNPC: boolean;
+}) {
+  const [target, setTarget] = useState("einstein");
   const [message, setMessage] = useState("");
-  const [waiting, setWaiting] = useState(false);
-  const [history, setHistory] = useState<Message[]>([
-    {
-      role: "npc",
-      text: "Привет! О чём поговорим?",
-    },
-  ]);
-
-  // Ответ нейросети приходит от сервера сообщением agent_reply
+  const [history, setHistory] = useState<Entry[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [evidence, setEvidence] = useState<Record<string, string>>({});
+  const [visitor, setVisitor] = useState<VisitorState | null>(null);
+  const bottom = useRef<HTMLDivElement>(null);
+  const request = useRef("");
   useEffect(() => {
-    if (!room) return;
-
-    const off = room.onMessage(
-      "agent_reply",
-      (data: { text: string }) => {
-        setHistory((previous) => [
-          ...previous,
-          { role: "npc", text: data.text },
-        ]);
-        setWaiting(false);
-      }
-    );
-
-    return () => {
-      if (typeof off === "function") off();
-    };
+    const remove = [
+      room.onMessage("visitor_state", (v: VisitorState | null) => setVisitor(v)),
+      room.onMessage("visitor_error", (e: { text: string }) => setError(e.text)),
+      room.onMessage("dialogue", (e: Entry) => setHistory((h) => [...h, e].slice(-100))),
+      room.onMessage("dialogue_done", (e: any) => {
+        if (e.requestId === request.current) {
+          setBusy(false);
+          if (e.error) setError(e.error);
+        }
+      }),
+      room.onMessage("evidence", (e: any) =>
+        setEvidence((old) => ({ ...old, [e.id]: e.text })),
+      ),
+      room.onMessage("case_history", (e: any) => {
+        setHistory(e.history);
+        setEvidence(e.evidence);
+      }),
+    ];
+    room.send("case_history", {});
+    room.send("visitor_request", {});
+    return () => remove.forEach((fn) => fn());
   }, [room]);
-
-  function sendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const text = message.trim();
-    if (!text || !room || waiting) return;
-
-    setHistory((previous) => [...previous, { role: "player", text }]);
-    setWaiting(true);
-
-    room.send("chat", { text, target: "einstein" });
-
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [history, open]);
+  function send(e: SubmitEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!message.trim() || busy) return;
+    setError("");
+    request.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setBusy(true);
+    room.send("chat", { text: message.trim(), target, requestId: request.current });
     setMessage("");
   }
-
   return (
-    <div
-      style={{
-        position: "absolute",
-        right: 24,
-        bottom: 24,
-        width: "min(420px, calc(100vw - 48px))",
-        height: 440,
-        background: "rgba(20, 28, 44, 0.96)",
-        color: "white",
-        borderRadius: 16,
-        padding: 20,
-        zIndex: 20,
-        display: "flex",
-        flexDirection: "column",
-        boxSizing: "border-box",
-        fontFamily: "Arial",
-      }}
+    <section
+      className="dialogue"
+      style={{ display: open ? "flex" : "none" }}
+      aria-label="Общий диалог с мудрецами"
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <h3 style={{ margin: 0 }}>Альберт Эйнштейн</h3>
-
-        <button onClick={onClose} type="button">
-          ✕
-        </button>
+      <div className="dialogue-top">
+        <div>
+          <b>Зал шести мудрецов</b>
+          <small>Общий разговор игроков этой комнаты</small>
+        </div>
+        <button onClick={onClose}>Закрыть</button>
       </div>
-
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          marginTop: 20,
-          marginBottom: 16,
-        }}
-      >
-        {history.map((item, index) => (
-          <div
-            key={index}
-            style={{
-              marginBottom: 14,
-              padding: 12,
-              background:
-                item.role === "player" ? "#385a91" : "#343e52",
-              borderRadius: 10,
-            }}
-          >
-            <strong>
-              {item.role === "player" ? "Ты" : "Эйнштейн"}
-            </strong>
-
-            <div style={{ marginTop: 6 }}>{item.text}</div>
-          </div>
-        ))}
-
-        {waiting && (
-          <div style={{ opacity: 0.7 }}>Эйнштейн думает…</div>
+      <div className="visitor-card">
+        {visitor ? (
+          <>
+            <b>{visitor.name}</b>
+            <small>
+              {visitor.phase === "arriving"
+                ? "Посетитель входит…"
+                : visitor.phase === "leaving"
+                  ? "Приём завершён. Посетитель уходит…"
+                  : "Проблема на обсуждении"}
+            </small>
+            <p>{visitor.problem}</p>
+            <button
+              type="button"
+              disabled={
+                busy || !nearNPC || visitor.phase !== "discussing" || visitor.replies < 1
+              }
+              onClick={() => room.send("visitor_action", { action: "finish" })}
+            >
+              Завершить приём
+            </button>
+          </>
+        ) : (
+          <>
+            <p>
+              Пригласи одного посетителя и обсуди его проблему с советом. После приёма он
+              уйдёт.
+            </p>
+            <button
+              type="button"
+              disabled={busy || !nearNPC}
+              onClick={() => room.send("visitor_action", { action: "call" })}
+            >
+              Пригласить посетителя
+            </button>
+          </>
         )}
       </div>
-
-      <form
-        onSubmit={sendMessage}
-        style={{ display: "flex", gap: 8 }}
+      {!visitor && (
+        <p className="muted">
+          Спроси о колоколе, воде, журнале или причале. Свидетели скрывают часть фактов,
+          пока группа не найдёт подтверждение. Без посетителя доступен прежний детективный
+          сценарий.
+        </p>
+      )}
+      <select
+        aria-label="Адресат"
+        value={target}
+        onChange={(e) => setTarget(e.target.value)}
+        disabled={busy}
       >
+        <option value="players">Игрокам комнаты</option>
+        <option value="all">Всем шести мудрецам по очереди</option>
+        {cast.map((n) => (
+          <option key={n.id} value={n.id}>
+            {n.name}
+          </option>
+        ))}
+      </select>
+      <div className="chat-log" aria-live="polite">
+        {history.map((e, i) => (
+          <article className={`bubble ${e.kind}`} key={i}>
+            <b>{e.speaker}</b>
+            <p>{e.text}</p>
+          </article>
+        ))}
+        <div ref={bottom} />
+      </div>
+      {!visitor && Object.keys(evidence).length > 0 && (
+        <details className="evidence">
+          <summary>Доска улик ({Object.keys(evidence).length})</summary>
+          {Object.entries(evidence).map(([id, text]) => (
+            <p key={id}>{text}</p>
+          ))}
+        </details>
+      )}
+      {busy && (
+        <small role="status">
+          Мудрецы думают. В режиме «Всем» ответы появятся по очереди.
+        </small>
+      )}
+      {!nearNPC && target !== "players" && (
+        <small>Для разговора войди в зал совета.</small>
+      )}
+      {error && <p role="alert">{error}</p>}
+      <form onSubmit={send}>
         <input
+          aria-label="Сообщение"
+          maxLength={600}
           value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          placeholder="Напиши сообщение..."
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: 12,
-            borderRadius: 8,
-            border: "none",
-          }}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Вопрос мудрецу или сообщение группе"
         />
-
-        <button type="submit" disabled={waiting || !room}>
+        <button
+          disabled={
+            busy ||
+            !message.trim() ||
+            (!nearNPC && target !== "players") ||
+            (!!visitor && visitor.phase !== "discussing" && target !== "players")
+          }
+        >
           Отправить
         </button>
       </form>
-    </div>
+    </section>
   );
 }

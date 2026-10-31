@@ -5,10 +5,7 @@ export type ChatMessage = {
 };
 
 export class OllamaClient {
-  constructor(
-    private readonly model =
-      process.env.OLLAMA_MODEL || "qwen2.5:3b",
-  ) {}
+  constructor(private readonly model = process.env.OLLAMA_MODEL || "qwen2.5:3b") {}
 
   async chat(messages: ChatMessage[]): Promise<string> {
     const controller = new AbortController();
@@ -16,7 +13,7 @@ export class OllamaClient {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:11434/api/chat",
+        `${process.env.OLLAMA_URL || "http://127.0.0.1:11434"}/api/chat`,
         {
           method: "POST",
           headers: {
@@ -40,9 +37,7 @@ export class OllamaClient {
       if (!response.ok) {
         const details = await response.text();
 
-        throw new Error(
-          `Ollama HTTP ${response.status}: ${details.slice(0, 500)}`,
-        );
+        throw new Error(`Ollama HTTP ${response.status}: ${details.slice(0, 500)}`);
       }
 
       const data = (await response.json()) as {
@@ -61,8 +56,7 @@ export class OllamaClient {
     } catch (error) {
       if (controller.signal.aborted) {
         throw new Error(
-          "Модель не ответила за 120 секунд. " +
-          "Проверь Ollama и доступную память.",
+          "Модель не ответила за 120 секунд. " + "Проверь Ollama и доступную память.",
         );
       }
 

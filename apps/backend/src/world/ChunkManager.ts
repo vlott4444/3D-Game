@@ -1,4 +1,4 @@
-import { Chunk } from '../rooms/schema/MyRoomState.js';
+import { Chunk } from "../rooms/schema/MyRoomState.js";
 
 const CHUNK_SIZE = 200;
 

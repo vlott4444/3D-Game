@@ -1,0 +1,7 @@
+node_modules
+build
+dist
+data
+preview-data
+package-lock.json
+*.gguf

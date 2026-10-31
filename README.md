@@ -1,98 +1,70 @@
-# Welcome to Colyseus!
+# Карантинный остров — зал шести мудрецов
 
-This project was created with [⚔️ `create-colyseus-app`](https://github.com/colyseus/create-colyseus-app/).
+Обновление от 1 ноября 2026 года. Браузерный многопользовательский прототип на React / Three.js / React Three Fiber / Rapier, сервер Colyseus, SQLite и локальная Ollama.
 
-[Documentation](https://docs.colyseus.io/)
+## Запуск
 
-## :crossed_swords: Usage
+Зависимости из предыдущего исправления уже должны быть установлены. Новых npm-пакетов для зала не требуется. Ollama с моделью qwen2.5:3b должна быть доступна серверу; имя и адрес можно изменить через настройки существующего OllamaClient.
 
-```
+В корне проекта:
+
+```bash
 npm start
 ```
 
-Then open http://localhost:2567 for the playground, or /monitor for the monitor.
-
-## Structure
-
-- `apps/backend/src/index.ts`: entry point — leave it alone if you plan to deploy to Colyseus Cloud
-- `apps/backend/src/app.config.ts`: server configuration — rooms, HTTP routes, express middleware
-- `apps/backend/src/rooms/MyRoom.ts`: your room handler
-- `apps/backend/src/rooms/schema/MyRoomState.ts`: the state synchronized to every client in the room
-- `apps/backend/test/MyRoom.test.ts`: boots the real server and connects a real client
-- `apps/backend/loadtest/example.ts`: scriptable client for `npm run loadtest`
-- `apps/backend/ecosystem.config.cjs`: pm2 configuration, used when deploying to Colyseus Cloud
-
-## Scripts
-
-- `npm start`: run the server in watch mode (`tsx watch src/index.ts`)
-- `npm test`: run the mocha test suite
-- `npm run build`: compile to `build/`
-- `npm run loadtest`: connect N simulated clients with [`@colyseus/loadtest`](https://github.com/colyseus/colyseus-loadtest/)
-
-## What's included
-
-### Monorepo
-
-Two packages that deploy independently: `apps/backend` (the Colyseus server) and
-`apps/frontend` (a Vite app). The frontend imports the backend's *types* — not
-its code — so `client.joinOrCreate("my_room")` is checked against the real room
-definitions while the two still ship separately.
+В другом терминале:
 
 ```bash
-npm start                      # backend, on :2567
-npm run dev -w apps/frontend   # frontend, on :3000 (second terminal)
+npm run dev --workspace=apps/frontend
 ```
 
-`workspaces` is declared with plain `*` ranges, so npm, pnpm and yarn all
-install it; `pnpm-workspace.yaml` is there for pnpm's own resolver.
+Открой http://localhost:3000. Для LAN нужны доступные порты 3000 и 2567 и правильный адрес backend в конфигурации клиента. Модель работает на серверном ноутбуке; отдельная копия модели каждому игроку не нужна.
 
-Pick this over the single Vite project when the two halves have different deploy
-targets or release cadences. If they don't, the Vite layout is less to run.
+## Управление и зал
 
-### Fixed tick + client prediction
+- WASD — движение, Shift — бег, пробел — прыжок, мышь — камера, Esc — освободить мышь.
+- «В зал» возвращает к входу и сохраняет новую позицию на сервере.
+- E внутри зала открывает общий диалог. «Общий чат» открывает его из HUD.
+- Эйнштейн, Кюри, Тесла, Лавлейс, Геродот и Холмс сидят полукругом вокруг стола. У каждого собственный профиль и минималистичная модель. Колонны, стены, полки, стол и ровный пол сделаны геометрией без загрузки внешних моделей.
 
-The room advances on `setFixedTimestep()`: a framework-owned accumulator runs
-`step()` a whole number of times per frame, each advancing exactly `1/TICK_RATE`
-seconds. A constant `dt` is what makes the client able to replay the same steps
-— with `setTimestep()`'s measured delta it could not.
+## Посетители по запросу
 
-`defineInput(MoveInput, …)` gives each client a server-side input buffer.
-`sanitize` clamps every field as it arrives, because nothing off the wire is
-trustworthy. The input schema is deliberately flat and carries no `seq`, no `dt`
-and no timestamp: the engine's own counter is the sequence, one input advances
-exactly one step, and the SDK stamps lag-comp timing on the wire envelope.
+Войди в зал, открой чат и нажми «Пригласить посетителя». Один человек за пять секунд подходит от входа к совету. Его проблема видна всем игрокам этой комнаты. После входа можно задавать свободные вопросы выбранному мудрецу или всем шести по очереди. Ответы появляются в общем чате.
 
-`apps/backend/src/shared/movement.ts` holds the one function both sides run. It is typed
-structurally so the same code steps a server Schema instance and the client
-reconciler's plain predicted copy, and it is pure — no clocks, no randomness, no
-reads outside its arguments. Keep it that way, or prediction and server will
-disagree.
+После хотя бы одного успешного ответа доступна кнопка «Завершить приём». Посетитель выходит за пять секунд, его модель удаляется, можно пригласить следующего. Окончательное решение оценивает игрок: автоматической проверки успешности решения пока нет.
 
-To add client-side prediction, see the client wiring in `apps/backend/src/client/` (generated
-when the Vite layout is chosen) or the netcode guide:
+Четыре подготовленные проблемы идут по кругу: распределение воды, расписание генератора, противоречивые показания о времени, спор о дороге через сад. Текст исходных проблем задан в VisitorManager.ts. Ответы совета генерирует настоящая локальная модель; специальных кодовых вопросов для них не нужно. Сам посетитель пока не ведёт отдельный разговор и не получает собственную LLM-очередь.
 
-- https://docs.colyseus.io/netcode/server-input
-- https://docs.colyseus.io/netcode/client-prediction
+На сервере в комнате существует максимум один временный посетитель. Повторный вызов до ухода отклоняется, завершение во время ответа заблокировано. Текущий приём хранится в памяти комнаты и после перезапуска сервера сбрасывается. История реплик сохраняется в SQLite с case_id, отдельно от других приёмов и старого расследования; в контекст модели передаются последние восемь сообщений этого игрока с этим мудрецом по текущему случаю плюс недавнее обсуждение комнаты.
 
-### Lobby room
+Без посетителя сохранён прежний детективный режим с показаниями, условным открытием улик и общей доской. В режиме посетителя мудрецы получают роль советников и описание актуальной проблемы вместо скрытых фактов детектива. Один Ollama-процесс обслуживает шесть профилей последовательно. Режим «Всем» существенно медленнее одного ответа.
 
-A `LobbyRoom` is registered as `lobby`, and the sample room is chained with
-`.enableRealtimeListing()` so the lobby receives create/update/dispose events for
-it. Clients join the lobby to render a live room browser:
+## Процедурный мир и производительность
 
-```ts
-const lobby = await client.joinOrCreate("lobby");
-lobby.onMessage("rooms", (rooms) => { /* full list on join */ });
-lobby.onMessage("+", ([roomId, room]) => { /* added or updated */ });
-lobby.onMessage("-", (roomId) => { /* removed */ });
-```
+ProceduralWorld.ts на сервере детерминированно создаёт одинаковые участки по seed и координатам. Размер чанка — 64×64 единицы. После авторизации клиент запрашивает мир, а при переходе игрока в следующий чанк сервер передаёт новое окно 3×3 через WebSocket. Старое окно заменяется, а не накапливается. HUD показывает число чанков: 9/9.
 
-- https://docs.colyseus.io/matchmaker/lobby
+В активном окне не более 90 деревьев и камней. Растительность и камни рисуются тремя instancedMesh. Пол состоит из девяти ровных плит с физическими коллайдерами. Зал и шесть постоянных мудрецов — отдельная постоянная сцена фиксированного размера. Временный посетитель — ещё одна модель.
 
-### Reconnection
+Старая граница ±48 удалена. Данные создаются по мере движения в любом направлении; сервер не держит растущий список всех посещённых участков. Это практически продолжающийся мир, а не математически бесконечные координаты: сервер отклоняет абсолютные координаты от 10 000 000, а для очень дальних путешествий ещё нужен перенос начала координат (floating origin) из-за точности физики и графики.
 
-`MyRoom.onDrop()` holds a dropped client's seat for 30 seconds via
-`allowReconnection()`. The SDK retries automatically with exponential backoff;
-`onReconnect()` fires if it gets back in time, `onLeave()` if it does not.
+DPR ограничен 1,25. Запросы кадров выполняются с целевой частотой 40 Гц при игре и 12 Гц при открытом диалоге, чтобы освободить ресурсы для локальной модели. Это бюджет отрисовки, а не гарантия FPS на любом ноутбуке. Если вкладка скрыта, таймер не запрашивает кадры.
 
-- https://docs.colyseus.io/room/reconnection
+Девять активных чанков — проверяемый предел количества объектов, но не доказательство ≤10% общего объёма данных из ТЗ. У процедурного мира без конечного манифеста нет определённого общего объёма в байтах. Для защиты задания нужен согласованный конечный каталог/манифест, учёт размеров ресурсов и отдельная проверка cachedBytes / totalWorldBytes ≤0,10. Также пока не сделаны разнообразные биомы и рельеф.
+
+## Авторизация, сохранения и память
+
+Регистрация и вход работают до WebSocket-подключения. Новые пароли хешируются scrypt, старые bcrypt-хеши поддерживаются. Подписанный JWT проверяется сервером; секрет хранится локально и не меняется при обычном перезапуске. Нельзя заходить одним аккаунтом одновременно в две сессии.
+
+SQLite сохраняет игроков и реплики. Поза отправляется примерно каждые 200 мс, сервер проверяет числа и скорость смещения, записывает данные до pose_saved. В интерфейсе видно «Сохранено». Восстанавливается последняя подтверждённая позиция, включая далёкие чанки. SQLite использует WAL и synchronous=FULL. Горизонтальная координата z в старой таблице называется pos_y, вертикальная высота хранится отдельно в height.
+
+При закрытии вкладки или аварии может потеряться ещё не подтверждённое движение, а не вся позиция. Для возврата нужен тот же аккаунт и сохранённая серверная БД. Физика выполняется на клиенте: ограничения скорости не заменяют полностью авторитетную серверную симуляцию.
+
+## Проверка обновления
+
+- Проверки TypeScript backend/frontend проходят.
+- 10 автоматических тестов: сохранения, JWT/пароли, история LLM и её изоляция по игроку/случаю, улики, авторизация WebSocket, два клиента, восстановление далёкой позиции и загрузка её чанков, общий посетитель и полный цикл его ухода, детерминированная генерация и маршрут через 401 окно с постоянным лимитом 9.
+- Backend и production-сборка frontend проходят. Предупреждение Vite о пакете около 3,6 МБ остаётся; разделение JS ещё не выполнено.
+- В настоящем браузере проверены зал, вызов посетителя, ответ Эйнштейна от установленной qwen2.5:3b, завершение приёма, прогулка за пределы прежней площадки и возврат в зал. Ошибок JavaScript не обнаружено. Качество рассуждений небольшой модели требует оценки: работающий вызов LLM не означает безошибочность совета.
+- Проверки сделаны на Windows Node.js 24 в отдельной копии. Скрипт apply-hall.sh повторит npm-проверки в твоём WSL с существующими зависимостями.
+
+Автономная LAN-сессия на нескольких физических ноутбуках, WebXR, голос, автоматическое оценивание решений и восстановление незавершённого приёма после перезапуска сервера отдельно не реализованы/не проверены. После установки пакетов и модели сцена и генерация ответов не требуют внешних сетевых API.

@@ -1,17 +1,24 @@
-
 import { ColyseusSDK } from "@colyseus/sdk";
-import type server from "@3d-game/backend/app.config";
-
-// Подключаемся к локальному серверу Colyseus
-const client = new ColyseusSDK<typeof server>(
-  `ws://${window.location.hostname}:2567`
-);
-
-// Подключение к игровой комнате
-export async function connectToGame() {
-  const room = await client.joinOrCreate("my_room");
-
-  console.log("Connected to Colyseus:", room.sessionId);
-
-  return room;
+const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+export async function connectToGame(token: string) {
+  const client = new ColyseusSDK(
+    `${protocol}//${location.hostname}:${import.meta.env.VITE_BACKEND_PORT || "2567"}`,
+  );
+  client.auth.token = token;
+  return client.joinOrCreate("my_room");
+}
+export type GameRoom = Awaited<ReturnType<typeof connectToGame>>;
+export async function authenticate(
+  action: "login" | "register",
+  username: string,
+  password: string,
+) {
+  const response = await fetch(`/api/auth/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw Error(data.error || "Ошибка входа");
+  return data as { token: string; username: string };
 }

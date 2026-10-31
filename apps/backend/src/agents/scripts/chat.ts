@@ -1,9 +1,11 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
+import { initDb } from "../../database/db.js";
 import { agentService } from "../AgentService.js";
 
 async function main(): Promise<void> {
+  initDb();
   const playerId = process.argv[2] || "player-1";
 
   const terminal = createInterface({
@@ -37,17 +39,12 @@ async function main(): Promise<void> {
           message,
         });
 
-        const seconds = (
-          (performance.now() - startedAt) / 1000
-        ).toFixed(1);
+        const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
 
         console.log(`\nЭйнштейн: ${reply.text}`);
         console.log(`[Ответ за ${seconds} с]\n`);
       } catch (error) {
-        console.error(
-          "\nОшибка:",
-          error instanceof Error ? error.message : error,
-        );
+        console.error("\nОшибка:", error instanceof Error ? error.message : error);
         console.log();
       }
     }

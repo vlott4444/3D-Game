@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -14,10 +13,7 @@ const desiredPosition = new THREE.Vector3();
 const desiredLookAt = new THREE.Vector3();
 const currentLookAt = new THREE.Vector3(0, 1.3, 0);
 
-export default function FollowCamera({
-  target,
-  yawRef,
-}: Props): null {
+export default function FollowCamera({ target, yawRef }: Props): null {
   const { gl } = useThree();
 
   const pitch = useRef(0.3);
@@ -38,11 +34,7 @@ export default function FollowCamera({
       yawRef.current -= event.movementX * 0.003;
       pitch.current += event.movementY * 0.003;
 
-      pitch.current = THREE.MathUtils.clamp(
-        pitch.current,
-        -0.25,
-        1.1
-      );
+      pitch.current = THREE.MathUtils.clamp(pitch.current, -0.25, 1.1);
     }
 
     function onWheel(event: WheelEvent) {
@@ -51,7 +43,7 @@ export default function FollowCamera({
       distance.current = THREE.MathUtils.clamp(
         distance.current + event.deltaY * 0.01,
         3,
-        12
+        12,
       );
     }
 
@@ -78,25 +70,19 @@ export default function FollowCamera({
     const angle = pitch.current;
     const radius = distance.current;
 
-    const horizontalDistance =
-      radius * Math.cos(angle);
+    const horizontalDistance = radius * Math.cos(angle);
 
     desiredPosition.set(
       position.x + Math.sin(yaw) * horizontalDistance,
       position.y + Math.sin(angle) * radius,
-      position.z + Math.cos(yaw) * horizontalDistance
+      position.z + Math.cos(yaw) * horizontalDistance,
     );
 
-    const smoothing =
-      1 - Math.exp(-8 * Math.min(delta, 0.05));
+    const smoothing = 1 - Math.exp(-8 * Math.min(delta, 0.05));
 
     camera.position.lerp(desiredPosition, smoothing);
 
-    desiredLookAt.set(
-      position.x,
-      position.y,
-      position.z
-    );
+    desiredLookAt.set(position.x, position.y, position.z);
 
     currentLookAt.lerp(desiredLookAt, smoothing);
     camera.lookAt(currentLookAt);

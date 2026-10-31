@@ -1,0 +1,185 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font:
+    15px/1.5 Arial,
+    sans-serif;
+  color: #eef4ed;
+  background: #102b31;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 13px;
+  background: #d5ae65;
+  color: #142d32;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+input,
+select {
+  border: 1px solid #466069;
+  border-radius: 6px;
+  background: #193b43;
+  color: #fff;
+  padding: 10px;
+  min-width: 0;
+}
+input:focus,
+select:focus {
+  outline: 2px solid #d5ae65;
+}
+.game {
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+}
+.hud {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: #122e36ed;
+  padding: 10px 16px;
+  border-radius: 9px;
+}
+.hud span {
+  flex: 1;
+  font-size: 12px;
+}
+.hint,
+.controls,
+.notice {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #122e36ed;
+}
+.hint {
+  bottom: 70px;
+}
+.controls {
+  bottom: 16px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.notice {
+  top: 85px;
+  max-width: 90%;
+  color: #ffd5bc;
+}
+.dialogue {
+  position: absolute;
+  right: 18px;
+  top: 85px;
+  bottom: 65px;
+  width: min(570px, calc(100vw - 36px));
+  background: #142e36f5;
+  border: 1px solid #4c6568;
+  border-radius: 12px;
+  padding: 18px;
+  flex-direction: column;
+  gap: 10px;
+}
+.dialogue-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dialogue small {
+  display: block;
+}
+.chat-log {
+  flex: 1;
+  overflow: auto;
+  min-height: 80px;
+}
+.bubble {
+  padding: 10px 12px;
+  margin: 8px 0;
+  border-left: 3px solid #d5ae65;
+  background: #23454c;
+}
+.bubble.player {
+  border-color: #76acbd;
+}
+.bubble.error {
+  border-color: #f28e82;
+}
+.bubble p {
+  white-space: pre-wrap;
+  margin: 4px 0;
+}
+.dialogue form {
+  display: flex;
+  gap: 8px;
+}
+.dialogue input {
+  flex: 1;
+}
+.muted {
+  color: #b2c9cc;
+  font-size: 13px;
+  margin: 4px 0;
+}
+.evidence {
+  max-height: 150px;
+  overflow: auto;
+  color: #e7cc90;
+}
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.login form {
+  max-width: 500px;
+  background: #183b44;
+  padding: 35px;
+  border-radius: 16px;
+}
+.login label {
+  display: block;
+  margin: 15px 0;
+}
+.login input {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+}
+.login h1 {
+  font-size: 36px;
+  margin: 8px 0 20px;
+}
+.loading {
+  padding: 120px 30px;
+}
+
+.visitor-card {
+  background: #28464a;
+  border-left: 3px solid #d5ae65;
+  padding: 10px 12px;
+  max-height: 190px;
+  overflow: auto;
+}
+.visitor-card p {
+  margin: 6px 0;
+  font-size: 13px;
+}

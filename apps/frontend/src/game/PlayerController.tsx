@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
@@ -9,6 +8,7 @@ import {
 } from "@react-three/rapier";
 import * as THREE from "three";
 
+import type { GameRoom } from "../network/GameConnection";
 import Player from "./Player";
 import FollowCamera from "./FollowCamera";
 import NPCInteraction from "./npc/NPCInteraction";
@@ -17,8 +17,7 @@ import NPCInteraction from "./npc/NPCInteraction";
 const BODY_HEIGHT = 1.18;
 const CAPSULE_HALF_HEIGHT = 0.8;
 const CAPSULE_RADIUS = 0.35;
-const CAPSULE_BOTTOM =
-  CAPSULE_HALF_HEIGHT + CAPSULE_RADIUS;
+const CAPSULE_BOTTOM = CAPSULE_HALF_HEIGHT + CAPSULE_RADIUS;
 
 // Скорости
 const WALK_SPEED = 6;
@@ -33,12 +32,16 @@ const FALL_GRAVITY_MULTIPLIER = 2.5;
 const direction = new THREE.Vector3();
 
 type Props = {
+  room: GameRoom;
+  initialPose: { x: number; z: number; height: number; rotY: number };
   dialogueOpen: boolean;
   onNearbyChange: (nearby: boolean) => void;
   onInteract: () => void;
 };
 
 export default function PlayerController({
+  room,
+  initialPose,
   dialogueOpen,
   onNearbyChange,
   onInteract,
@@ -49,7 +52,39 @@ export default function PlayerController({
   const keys = useRef<Record<string, boolean>>({});
   const jumpRequested = useRef(false);
 
-  const yawRef = useRef(0);
+  const yawRef = useRef(initialPose.rotY);
+  const lastSend = useRef(0);
+  const sequence = useRef(0);
+  useEffect(
+    () =>
+      room.onMessage("spawn", (p: any) => {
+        bodyRef.current?.setTranslation({ x: p.x, y: p.height, z: p.z }, true);
+        bodyRef.current?.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        yawRef.current = p.rotY;
+      }),
+    [room],
+  );
+  // Persist both standing and moving poses, including while the dialogue is open.
+  useFrame(({ clock }) => {
+    const body = bodyRef.current;
+    if (!body || clock.elapsedTime - lastSend.current < 0.2) return;
+    lastSend.current = clock.elapsedTime;
+    const p = body.translation();
+    const x = p.x;
+    const z = p.z;
+    if (p.y < -5) {
+      body.setTranslation({ x: initialPose.x, y: BODY_HEIGHT, z: initialPose.z }, true);
+      return;
+    }
+    if (x !== p.x || z !== p.z) body.setTranslation({ x, y: p.y, z }, true);
+    room.send("pose", {
+      x,
+      z,
+      height: Math.max(1.18, p.y),
+      rotY: yawRef.current,
+      seq: ++sequence.current,
+    });
+  });
 
   // Состояния анимации
   const isMoving = useRef(false);
@@ -75,31 +110,20 @@ export default function PlayerController({
       if (
         element instanceof HTMLElement &&
         (element.isContentEditable ||
-          ["INPUT", "TEXTAREA", "SELECT"].includes(
-            element.tagName
-          ))
+          ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName))
       ) {
         return;
       }
 
       if (
-        [
-          "KeyW",
-          "KeyA",
-          "KeyS",
-          "KeyD",
-          "Space",
-          "ShiftLeft",
-          "ShiftRight",
-        ].includes(event.code)
+        ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight"].includes(
+          event.code,
+        )
       ) {
         event.preventDefault();
       }
 
-      if (
-        event.code === "Space" &&
-        !event.repeat
-      ) {
+      if (event.code === "Space" && !event.repeat) {
         jumpRequested.current = true;
       }
 
@@ -155,7 +179,7 @@ export default function PlayerController({
           y: velocity.y,
           z: 0,
         },
-        true
+        true,
       );
 
       keys.current = {};
@@ -166,29 +190,17 @@ export default function PlayerController({
 
       // Даже во время разговора игрок должен
       // продолжать падать под действием гравитации
-      body.setGravityScale(
-        velocity.y < -0.1
-          ? FALL_GRAVITY_MULTIPLIER
-          : 1,
-        true
-      );
+      body.setGravityScale(velocity.y < -0.1 ? FALL_GRAVITY_MULTIPLIER : 1, true);
 
       return;
     }
 
     // WASD
-    const forward =
-      Number(!!keys.current["KeyW"]) -
-      Number(!!keys.current["KeyS"]);
+    const forward = Number(!!keys.current["KeyW"]) - Number(!!keys.current["KeyS"]);
 
-    const strafe =
-      Number(!!keys.current["KeyD"]) -
-      Number(!!keys.current["KeyA"]);
+    const strafe = Number(!!keys.current["KeyD"]) - Number(!!keys.current["KeyA"]);
 
-    const running = Boolean(
-      keys.current["ShiftLeft"] ||
-      keys.current["ShiftRight"]
-    );
+    const running = Boolean(keys.current["ShiftLeft"] || keys.current["ShiftRight"]);
 
     direction.set(0, 0, 0);
 
@@ -197,11 +209,9 @@ export default function PlayerController({
       const yaw = yawRef.current;
 
       direction.set(
-        -Math.sin(yaw) * forward +
-          Math.cos(yaw) * strafe,
+        -Math.sin(yaw) * forward + Math.cos(yaw) * strafe,
         0,
-        -Math.cos(yaw) * forward -
-          Math.sin(yaw) * strafe
+        -Math.cos(yaw) * forward - Math.sin(yaw) * strafe,
       );
 
       direction.normalize();
@@ -219,7 +229,7 @@ export default function PlayerController({
         y: velocity.y,
         z: direction.z * speed,
       },
-      true
+      true,
     );
 
     // -----------------------------
@@ -238,24 +248,13 @@ export default function PlayerController({
         x: 0,
         y: -1,
         z: 0,
-      }
+      },
     );
 
     // Игнорируем собственное физическое тело
-    const hit = world.castRay(
-      ray,
-      0.25,
-      true,
-      undefined,
-      undefined,
-      undefined,
-      body
-    );
+    const hit = world.castRay(ray, 0.25, true, undefined, undefined, undefined, body);
 
-    const grounded =
-      hit !== null &&
-      hit.timeOfImpact <= 0.2 &&
-      velocity.y <= 0.5;
+    const grounded = hit !== null && hit.timeOfImpact <= 0.2 && velocity.y <= 0.5;
 
     // -----------------------------
     // Прыжок
@@ -270,7 +269,7 @@ export default function PlayerController({
           y: JUMP_SPEED,
           z: direction.z * speed,
         },
-        true
+        true,
       );
 
       justJumped = true;
@@ -285,10 +284,7 @@ export default function PlayerController({
     const verticalVelocity = body.linvel().y;
 
     if (verticalVelocity < -0.1) {
-      body.setGravityScale(
-        FALL_GRAVITY_MULTIPLIER,
-        true
-      );
+      body.setGravityScale(FALL_GRAVITY_MULTIPLIER, true);
     } else {
       body.setGravityScale(1, true);
     }
@@ -308,18 +304,14 @@ export default function PlayerController({
     if (moving && visualRef.current) {
       const model = visualRef.current;
 
-      const targetRotation = Math.atan2(
-        -direction.x,
-        -direction.z
-      );
+      const targetRotation = Math.atan2(-direction.x, -direction.z);
 
       const difference = Math.atan2(
         Math.sin(targetRotation - model.rotation.y),
-        Math.cos(targetRotation - model.rotation.y)
+        Math.cos(targetRotation - model.rotation.y),
       );
 
-      const smoothing =
-        1 - Math.exp(-12 * Math.min(delta, 0.05));
+      const smoothing = 1 - Math.exp(-12 * Math.min(delta, 0.05));
 
       model.rotation.y += difference * smoothing;
     }
@@ -331,25 +323,17 @@ export default function PlayerController({
       <RigidBody
         ref={bodyRef}
         type="dynamic"
-        position={[0, BODY_HEIGHT, 5]}
+        position={[initialPose.x, initialPose.height, initialPose.z]}
         colliders={false}
         lockRotations
         friction={0.8}
         restitution={0}
         ccd
       >
-        <CapsuleCollider
-          args={[
-            CAPSULE_HALF_HEIGHT,
-            CAPSULE_RADIUS,
-          ]}
-        />
+        <CapsuleCollider args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} />
 
         {/* Анимированный персонаж */}
-        <group
-          ref={visualRef}
-          position={[0, -BODY_HEIGHT, 0]}
-        >
+        <group ref={visualRef} position={[0, -BODY_HEIGHT, 0]}>
           <Player
             movement={{
               moving: isMoving,
@@ -361,10 +345,7 @@ export default function PlayerController({
       </RigidBody>
 
       {/* Камера */}
-      <FollowCamera
-        target={bodyRef}
-        yawRef={yawRef}
-      />
+      <FollowCamera target={bodyRef} yawRef={yawRef} />
 
       {/* Взаимодействие с NPC */}
       <NPCInteraction

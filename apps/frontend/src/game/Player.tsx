@@ -1,4 +1,3 @@
-
 import { useRef } from "react";
 import type { RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -16,10 +15,7 @@ type PlayerProps = ThreeElements["group"] & {
   movement: PlayerMovement;
 };
 
-export default function Player({
-  movement,
-  ...props
-}: PlayerProps) {
+export default function Player({ movement, ...props }: PlayerProps) {
   const leftArm = useRef<THREE.Group>(null);
   const rightArm = useRef<THREE.Group>(null);
   const leftLeg = useRef<THREE.Group>(null);
@@ -43,47 +39,27 @@ export default function Player({
     // Амплитуда движения рук и ног
     const swing =
       isMoving && !isJumping
-        ? Math.sin(animationTime.current) *
-          (isRunning ? 0.7 : 0.4)
+        ? Math.sin(animationTime.current) * (isRunning ? 0.7 : 0.4)
         : 0;
 
     // Плавное изменение позы
     const smoothing = 1 - Math.exp(-12 * dt);
 
-    function rotate(
-      part: THREE.Group | null,
-      target: number
-    ) {
+    function rotate(part: THREE.Group | null, target: number) {
       if (!part) return;
 
-      part.rotation.x = THREE.MathUtils.lerp(
-        part.rotation.x,
-        target,
-        smoothing
-      );
+      part.rotation.x = THREE.MathUtils.lerp(part.rotation.x, target, smoothing);
     }
 
     // Ноги двигаются в противофазе
-    rotate(
-      leftLeg.current,
-      isJumping ? -0.35 : swing
-    );
+    rotate(leftLeg.current, isJumping ? -0.35 : swing);
 
-    rotate(
-      rightLeg.current,
-      isJumping ? -0.35 : -swing
-    );
+    rotate(rightLeg.current, isJumping ? -0.35 : -swing);
 
     // Руки двигаются противоположно ногам
-    rotate(
-      leftArm.current,
-      isJumping ? -0.7 : -swing
-    );
+    rotate(leftArm.current, isJumping ? -0.7 : -swing);
 
-    rotate(
-      rightArm.current,
-      isJumping ? -0.7 : swing
-    );
+    rotate(rightArm.current, isJumping ? -0.7 : swing);
   });
 
   return (
@@ -101,10 +77,7 @@ export default function Player({
       </mesh>
 
       {/* Левая рука */}
-      <group
-        ref={leftArm}
-        position={[-0.51, 1.65, 0]}
-      >
+      <group ref={leftArm} position={[-0.51, 1.65, 0]}>
         <mesh position={[0, -0.37, 0]} castShadow>
           <boxGeometry args={[0.23, 0.75, 0.25]} />
           <meshStandardMaterial color="#3978c6" />
@@ -112,10 +85,7 @@ export default function Player({
       </group>
 
       {/* Правая рука */}
-      <group
-        ref={rightArm}
-        position={[0.51, 1.65, 0]}
-      >
+      <group ref={rightArm} position={[0.51, 1.65, 0]}>
         <mesh position={[0, -0.37, 0]} castShadow>
           <boxGeometry args={[0.23, 0.75, 0.25]} />
           <meshStandardMaterial color="#3978c6" />
@@ -123,10 +93,7 @@ export default function Player({
       </group>
 
       {/* Левая нога */}
-      <group
-        ref={leftLeg}
-        position={[-0.2, 0.7, 0]}
-      >
+      <group ref={leftLeg} position={[-0.2, 0.7, 0]}>
         <mesh position={[0, -0.35, 0]} castShadow>
           <boxGeometry args={[0.25, 0.7, 0.3]} />
           <meshStandardMaterial color="#283d60" />
@@ -134,10 +101,7 @@ export default function Player({
       </group>
 
       {/* Правая нога */}
-      <group
-        ref={rightLeg}
-        position={[0.2, 0.7, 0]}
-      >
+      <group ref={rightLeg} position={[0.2, 0.7, 0]}>
         <mesh position={[0, -0.35, 0]} castShadow>
           <boxGeometry args={[0.25, 0.7, 0.3]} />
           <meshStandardMaterial color="#283d60" />

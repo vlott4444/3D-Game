@@ -1,188 +1,108 @@
-
-import {
-  RigidBody,
-  CuboidCollider,
-  CylinderCollider,
-} from "@react-three/rapier";
-
-// Тип координат объекта
-type Position = [number, number, number];
-
-// Ящик или прямоугольное препятствие
-type BoxObjectProps = {
-  position: Position;
-  size: Position;
-  color: string;
-};
-
-function BoxObject({
-  position,
-  size,
-  color,
-}: BoxObjectProps) {
-  return (
-    <RigidBody
-      type="fixed"
-      colliders={false}
-      position={position}
-    >
-      <CuboidCollider
-        args={[size[0] / 2, size[1] / 2, size[2] / 2]}
-      />
-
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={size} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-    </RigidBody>
-  );
+import { useEffect, useMemo, useRef, useLayoutEffect, useState } from "react";
+import { RigidBody, CuboidCollider, CylinderCollider } from "@react-three/rapier";
+import { InstancedMesh, Object3D } from "three";
+import type { GameRoom } from "../network/GameConnection";
+import Hall from "./Hall";
+type WorldObject = { kind: "tree" | "rock"; x: number; z: number; scale: number };
+type Chunk = { id: string; cx: number; cz: number; objects: WorldObject[] };
+type Snapshot = { chunkSize: number; chunks: Chunk[] };
+const SIZE = 64;
+function bootstrap(x: number, z: number): Snapshot {
+  const chunks: Chunk[] = [];
+  for (let dx = -1; dx <= 1; dx++)
+    for (let dz = -1; dz <= 1; dz++) {
+      const cx = Math.floor(x / SIZE) + dx,
+        cz = Math.floor(z / SIZE) + dz;
+      chunks.push({ id: `${cx}:${cz}`, cx, cz, objects: [] });
+    }
+  return { chunkSize: SIZE, chunks };
 }
-
-// Дерево: физическое столкновение только со стволом
-function Tree({ position }: { position: Position }) {
-  return (
-    <RigidBody
-      type="fixed"
-      colliders={false}
-      position={position}
-    >
-      <CylinderCollider
-        args={[1, 0.35]}
-        position={[0, 1, 0]}
-      />
-
-      {/* Ствол */}
-      <mesh position={[0, 1, 0]} castShadow>
-        <cylinderGeometry args={[0.25, 0.35, 2, 8]} />
-        <meshStandardMaterial color="#795548" />
-      </mesh>
-
-      {/* Крона */}
-      <mesh position={[0, 2.7, 0]} castShadow>
-        <coneGeometry args={[1.25, 3, 8]} />
-        <meshStandardMaterial color="#3c8c57" />
-      </mesh>
-    </RigidBody>
-  );
-}
-
-// Здание: коллайдер только на основной части
-function Building({
-  position,
-  color,
-}: {
-  position: Position;
-  color: string;
-}) {
-  return (
-    <RigidBody
-      type="fixed"
-      colliders={false}
-      position={position}
-    >
-      {/* Стены здания */}
-      <CuboidCollider
-        args={[3, 2, 2.5]}
-        position={[0, 2, 0]}
-      />
-
-      <mesh
-        position={[0, 2, 0]}
-        castShadow
-        receiveShadow
-      >
-        <boxGeometry args={[6, 4, 5]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-
-      {/* Крыша — без коллайдера */}
-      <mesh position={[0, 4.6, 0]} castShadow>
-        <coneGeometry args={[4.5, 2, 4]} />
-        <meshStandardMaterial color="#a64f3d" />
-      </mesh>
-
-      {/* Дверь — декоративная */}
-      <mesh position={[0, 1, 2.51]}>
-        <boxGeometry args={[1.2, 2, 0.05]} />
-        <meshStandardMaterial color="#654321" />
-      </mesh>
-
-      {/* Окна */}
-      <mesh position={[-1.8, 2.5, 2.52]}>
-        <boxGeometry args={[0.8, 0.9, 0.05]} />
-        <meshStandardMaterial color="#9ed9f5" />
-      </mesh>
-
-      <mesh position={[1.8, 2.5, 2.52]}>
-        <boxGeometry args={[0.8, 0.9, 0.05]} />
-        <meshStandardMaterial color="#9ed9f5" />
-      </mesh>
-    </RigidBody>
-  );
-}
-
-// Основной игровой мир
-export default function World() {
+function Grove({ objects }: { objects: WorldObject[] }) {
+  const trunk = useRef<InstancedMesh>(null),
+    leaves = useRef<InstancedMesh>(null),
+    rock = useRef<InstancedMesh>(null);
+  const trees = useMemo(() => objects.filter((o) => o.kind === "tree"), [objects]);
+  const rocks = useMemo(() => objects.filter((o) => o.kind === "rock"), [objects]);
+  useLayoutEffect(() => {
+    const dummy = new Object3D();
+    function place(
+      mesh: InstancedMesh | null,
+      items: WorldObject[],
+      height: number,
+      verticalScale = 1,
+    ) {
+      if (!mesh) return;
+      items.forEach((o, i) => {
+        dummy.position.set(o.x, height * o.scale, o.z);
+        dummy.scale.set(o.scale, o.scale * verticalScale, o.scale);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+    place(trunk.current, trees, 1);
+    place(leaves.current, trees, 3);
+    place(rock.current, rocks, 0.3, 0.65);
+  }, [trees, rocks]);
   return (
     <>
-      {/* Земля */}
-      <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider
-          args={[50, 0.15, 50]}
-          position={[0, -0.15, 0]}
-        />
-
-        <mesh position={[0, -0.15, 0]} receiveShadow>
-          <boxGeometry args={[100, 0.3, 100]} />
-          <meshStandardMaterial color="#83b56e" />
-        </mesh>
-      </RigidBody>
-
-      {/* Здания */}
-      <Building
-        position={[-12, 0, -12]}
-        color="#e2ba83"
-      />
-
-      <Building
-        position={[12, 0, -12]}
-        color="#d5a6c8"
-      />
-
-      {/* Деревья */}
-      <Tree position={[-7, 0, 3]} />
-      <Tree position={[7, 0, 3]} />
-      <Tree position={[-16, 0, 6]} />
-      <Tree position={[16, 0, 6]} />
-
-      {/* Ящики */}
-      <BoxObject
-        position={[4, 0.75, -4]}
-        size={[1.5, 1.5, 1.5]}
-        color="#a87c4f"
-      />
-
-      <BoxObject
-        position={[6, 0.75, -4]}
-        size={[1.5, 1.5, 1.5]}
-        color="#ad895b"
-      />
-
-      {/* Стена для проверки столкновений */}
-      <BoxObject
-        position={[0, 1.25, -8]}
-        size={[10, 2.5, 0.5]}
-        color="#b6b9c0"
-      />
-
-      {/* Каменная дорожка */}
-      <mesh
-        position={[0, 0.015, -4]}
-        receiveShadow
-      >
-        <boxGeometry args={[3, 0.02, 14]} />
-        <meshStandardMaterial color="#c2bbb1" />
-      </mesh>
+      <instancedMesh ref={trunk} args={[undefined, undefined, trees.length]} castShadow>
+        <cylinderGeometry args={[0.22, 0.32, 2, 6]} />
+        <meshStandardMaterial color="#695339" />
+      </instancedMesh>
+      <instancedMesh ref={leaves} args={[undefined, undefined, trees.length]} castShadow>
+        <coneGeometry args={[1.6, 3.2, 7]} />
+        <meshStandardMaterial color="#4d795b" />
+      </instancedMesh>
+      <instancedMesh ref={rock} args={[undefined, undefined, rocks.length]}>
+        <dodecahedronGeometry args={[0.8, 0]} />
+        <meshStandardMaterial color="#939b91" />
+      </instancedMesh>
+      {trees.map((o, i) => (
+        <RigidBody key={i} type="fixed" colliders={false} position={[o.x, 0, o.z]}>
+          <CylinderCollider args={[o.scale, 0.3 * o.scale]} position={[0, o.scale, 0]} />
+        </RigidBody>
+      ))}
+    </>
+  );
+}
+export default function World({
+  room,
+  initialPose,
+}: {
+  room: GameRoom;
+  initialPose: { x: number; z: number };
+}) {
+  const [snapshot, setSnapshot] = useState(() => bootstrap(initialPose.x, initialPose.z));
+  useEffect(() => {
+    const off = room.onMessage("world_snapshot", (data: Snapshot) => {
+      if (data.chunkSize !== SIZE || data.chunks.length > 9) return;
+      setSnapshot(data);
+    });
+    room.send("world_request", {});
+    return off;
+  }, [room]);
+  const objects = useMemo(() => snapshot.chunks.flatMap((c) => c.objects), [snapshot]);
+  return (
+    <>
+      {snapshot.chunks.map((c) => (
+        <RigidBody key={c.id} type="fixed" colliders={false}>
+          <CuboidCollider
+            position={[(c.cx + 0.5) * SIZE, -0.15, (c.cz + 0.5) * SIZE]}
+            args={[SIZE / 2, 0.15, SIZE / 2]}
+          />
+          <mesh
+            position={[(c.cx + 0.5) * SIZE, -0.15, (c.cz + 0.5) * SIZE]}
+            receiveShadow
+          >
+            <boxGeometry args={[SIZE, 0.3, SIZE]} />
+            <meshStandardMaterial color="#8d9c76" roughness={1} />
+          </mesh>
+        </RigidBody>
+      ))}
+      <Grove key={snapshot.chunks.map((c) => c.id).join(",")} objects={objects} />
+      <Hall />
     </>
   );
 }

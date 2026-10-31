@@ -1,81 +1,38 @@
-
-import { useEffect, useRef } from "react";
-import type { RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { RapierRigidBody } from "@react-three/rapier";
-import { EINSTEIN_POSITION } from "./NPC";
-
-type Props = {
-  playerRef: RefObject<RapierRigidBody | null>;
-  enabled: boolean;
-  onNearbyChange: (nearby: boolean) => void;
-  onInteract: () => void;
-};
-
 export default function NPCInteraction({
   playerRef,
   enabled,
   onNearbyChange,
   onInteract,
-}: Props): null {
-  const nearbyRef = useRef(false);
-
-  // Храним актуальные обработчики
-  const callbacksRef = useRef({
-    onNearbyChange,
-    onInteract,
-  });
-
-  callbacksRef.current = {
-    onNearbyChange,
-    onInteract,
-  };
-
+}: {
+  playerRef: RefObject<RapierRigidBody | null>;
+  enabled: boolean;
+  onNearbyChange: (b: boolean) => void;
+  onInteract: () => void;
+}): null {
+  const near = useRef(false);
+  const callbacks = useRef({ onNearbyChange, onInteract, enabled });
+  callbacks.current = { onNearbyChange, onInteract, enabled };
   useFrame(() => {
-    const body = playerRef.current;
-    if (!body) return;
-
-    const position = body.translation();
-
-    const distance = Math.hypot(
-      position.x - EINSTEIN_POSITION[0],
-      position.z - EINSTEIN_POSITION[2]
-    );
-
-    const nearby = distance <= 3.5;
-
-    if (nearby !== nearbyRef.current) {
-      nearbyRef.current = nearby;
-      callbacksRef.current.onNearbyChange(nearby);
-
-      console.log("NPC nearby:", nearby);
+    const p = playerRef.current?.translation();
+    if (!p) return;
+    const next = Math.abs(p.x) < 11 && p.z > -12 && p.z < 11;
+    if (next !== near.current) {
+      near.current = next;
+      callbacks.current.onNearbyChange(next);
     }
   });
-
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.code !== "KeyE" || event.repeat) return;
-
-      console.log("E нажата", {
-        enabled,
-        nearby: nearbyRef.current,
-      });
-
-      if (!enabled || !nearbyRef.current) return;
-
-      event.preventDefault();
-
-      console.log("Открываем диалог!");
-
-      callbacksRef.current.onInteract();
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+    const key = (e: KeyboardEvent) => {
+      if (e.code === "KeyE" && !e.repeat && near.current && callbacks.current.enabled) {
+        e.preventDefault();
+        callbacks.current.onInteract();
+      }
     };
-  }, [enabled]);
-
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
   return null;
 }

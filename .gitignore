@@ -1,8 +1,8 @@
 node_modules
 build
-.colyseus-cloud.json
-.devmode.json
 dist
+.env*
+!.env.example
+apps/backend/data/
 *.gguf
-*.gguf
-*.gguf
+*.bak

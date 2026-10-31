@@ -1,23 +1,37 @@
-import Database from 'better-sqlite3';
-import { readFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH || './data/game.db';
-
-let db: Database.Database;
-
-export function initDb() {
-  mkdirSync(dirname(DB_PATH), { recursive: true });
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8');
-  db.exec(schema);
-  console.log('[DB] Initialized at', DB_PATH);
-}
-
-export function getDb() {
-  if (!db) throw new Error('DB not initialized');
+import { DatabaseSync } from "node:sqlite";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+let db: DatabaseSync;
+export function initDb(
+  path = process.env.DB_PATH ||
+    fileURLToPath(new URL("../../data/game.db", import.meta.url)),
+) {
+  if (db) return db;
+  if (path !== ":memory:") mkdirSync(dirname(resolve(path)), { recursive: true });
+  db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;");
+  db.exec(readFileSync(new URL("./schema.sql", import.meta.url), "utf8"));
+  const columns = db.prepare("PRAGMA table_info(players)").all() as { name: string }[];
+  if (!columns.some((c) => c.name === "height"))
+    db.exec("ALTER TABLE players ADD COLUMN height REAL DEFAULT 1.18");
+  db.exec(`CREATE TABLE IF NOT EXISTS dialogue (id INTEGER PRIMARY KEY, player_id TEXT NOT NULL, npc_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS dialogue_lookup ON dialogue(player_id,npc_id,id);
+    CREATE TABLE IF NOT EXISTS evidence (player_id TEXT NOT NULL, clue_id TEXT NOT NULL, PRIMARY KEY(player_id,clue_id));`);
+  const dialogueColumns = db.prepare("PRAGMA table_info(dialogue)").all() as {
+    name: string;
+  }[];
+  if (!dialogueColumns.some((c) => c.name === "case_id"))
+    db.exec("ALTER TABLE dialogue ADD COLUMN case_id TEXT");
   return db;
+}
+export function getDb() {
+  if (!db) throw new Error("DB not initialized");
+  return db;
+}
+export function closeDb() {
+  if (db) {
+    db.close();
+    db = undefined!;
+  }
 }
