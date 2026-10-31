@@ -1,15 +1,5 @@
 import { schema, t, type SchemaType } from "@colyseus/schema";
 
-/**
- * One input frame, consumed by `Room.defineInput()`. Flat primitives only, and
- * deliberately minimal:
- *   - no `seq`  — the engine's input counter is the sequence
- *   - no `dt`   — fixed timestep: one input advances exactly one step
- *   - no time   — the SDK stamps lag-comp timing on the wire envelope
- *
- * `int8<-1 | 0 | 1>` narrows the type for your code; the room's `sanitize`
- * clamp is what actually enforces it against a modified client.
- */
 export const MoveInput = schema({
   moveX: t.int8<-1 | 0 | 1>(),
   moveY: t.int8<-1 | 0 | 1>(),
@@ -24,9 +14,21 @@ export const Player = schema({
 });
 export type Player = SchemaType<typeof Player>;
 
+export const Entity = schema({
+  id: t.string(),
+  type: t.string(),
+  x: t.number(),
+  y: t.number(),
+});
+export type Entity = SchemaType<typeof Entity>;
+
+export const Chunk = schema({
+  id: t.string(),
+  entities: t.array(Entity),
+});
+export type Chunk = SchemaType<typeof Chunk>;
+
 export const MyRoomState = schema({
-
   players: t.map(Player),
-
 });
 export type MyRoomState = SchemaType<typeof MyRoomState>;
