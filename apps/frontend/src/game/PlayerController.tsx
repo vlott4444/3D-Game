@@ -21,11 +21,11 @@ const CAPSULE_BOTTOM =
   CAPSULE_HALF_HEIGHT + CAPSULE_RADIUS;
 
 // Скорости
-const WALK_SPEED = 4;
-const RUN_SPEED = 7;
+const WALK_SPEED = 6;
+const RUN_SPEED = 12;
 
 // Прыжок
-const JUMP_SPEED = 8.5;
+const JUMP_SPEED = 5;
 
 // Ускоренное падение
 const FALL_GRAVITY_MULTIPLIER = 2.5;

@@ -63,7 +63,7 @@ export default function GameScene({
       />
 
       <Suspense fallback={null}>
-        <Physics gravity={[0, -9.81, 0]}>
+        <Physics gravity={[0, -14, 0]}>
           {/* Игровой мир */}
           <World />
 

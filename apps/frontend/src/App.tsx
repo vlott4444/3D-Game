@@ -141,29 +141,11 @@ export default function App() {
 
       {/* Информация об игре */}
       <div
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 20,
-          zIndex: 10,
-          padding: "12px 16px",
-          background: "rgba(0, 0, 0, 0.65)",
-          color: "white",
-          borderRadius: 10,
-          fontFamily: "Arial",
-          pointerEvents: "none",
-        }}
       >
         <div>{status}</div>
         <div>Players: {playersCount}</div>
 
-        <div style={{ marginTop: 8 }}>
-          WASD — движение
-        </div>
 
-        <div>Shift — бег</div>
-        <div>Space — прыжок</div>
-        <div>E — разговор с NPC</div>
       </div>
 
       {/* Подсказка рядом с Эйнштейном */}
