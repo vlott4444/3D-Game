@@ -22,8 +22,11 @@
     "@colyseus/loadtest": "^0.18.1",
     "@colyseus/sdk": "^0.18.1",
     "@colyseus/testing": "^0.18.5",
+    "@types/bcrypt": "^6.0.0",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
-    "@types/mocha": "^10.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/mocha": "^10.0.10",
     "mocha": "^11.7.5",
     "rimraf": "^5.0.0",
     "tsx": "^4.21.0",
@@ -32,8 +35,13 @@
   "dependencies": {
     "@colyseus/schema": "^5.0.14",
     "@colyseus/tools": "^0.18.1",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^13.0.3",
     "colyseus": "^0.18.2",
-    "express": "^5.2.1"
+    "dotenv": "^18.0.9",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "zod": "^4.6.7"
   },
   "exports": {
     "./*": "./src/*.ts"
