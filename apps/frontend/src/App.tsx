@@ -3,6 +3,7 @@ import GameScene from "./game/GameScene";
 import DialoguePanel from "./ui/DialoguePanel";
 import { authenticate, connectToGame, type GameRoom } from "./network/GameConnection";
 import "./style.css";
+import type { InteractionTarget } from "./game/npc/interactionTarget";
 import { useCouncilTurn } from "./network/CouncilTurn";
 type Pose = { x: number; z: number; height: number; rotY: number };
 export default function App() {
@@ -13,7 +14,8 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
-  const [near, setNear] = useState(false);
+  const [interaction, setInteraction] = useState<InteractionTarget | null>(null);
+  const [dialogueTarget, setDialogueTarget] = useState("players");
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState("Ожидаем сохранения");
   const [chunkCount, setChunkCount] = useState(0);
@@ -72,7 +74,8 @@ export default function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, []);
-  const openChat = () => {
+  const openChat = (target: string) => {
+    setDialogueTarget(target);
     if (document.pointerLockElement) document.exitPointerLock();
     setOpen(true);
   };
@@ -99,11 +102,11 @@ export default function App() {
             void login("login");
           }}
         >
-          <small>Детектив с локальным ИИ</small>
-          <h1>Карантинный остров</h1>
+          <small>3D-зал с локальным ИИ</small>
+          <h1>Совет мудрецов</h1>
           <p>
-            На острове погиб куратор. Сопоставь показания шести свидетелей с другими
-            игроками.
+            Принеси свою задачу или пригласи посетителя. Сравни доводы шести ярких
+            собеседников и найди решение вместе с другими игроками.
           </p>
           <label>
             Имя
@@ -150,8 +153,8 @@ export default function App() {
           room={room}
           initialPose={spawn}
           dialogueOpen={open}
-          nearNPC={near}
-          onNearbyChange={setNear}
+          interaction={interaction}
+          onNearbyChange={setInteraction}
           onInteract={openChat}
           council={council}
         />
@@ -159,12 +162,12 @@ export default function App() {
         <div className="loading">Подключаемся к острову…</div>
       )}
       <header className="hud">
-        <b>Карантинный остров</b>
+        <b>Совет мудрецов</b>
         <span>
           {room ? "В игре" : "Нет соединения"} · {saved} · Чанков: {chunkCount}/9
         </span>
-        <button onClick={openChat} disabled={!room}>
-          Общий чат
+        <button onClick={() => openChat("players")} disabled={!room}>
+          Чат игроков
         </button>
         <button disabled={!room} onClick={() => room?.send("return_to_hall", {})}>
           В зал
@@ -185,7 +188,7 @@ export default function App() {
           {error}
         </div>
       )}
-      {near && !open && <div className="hint">E — открыть совет мудрецов</div>}
+      {interaction && !open && <div className="hint">E — {interaction.label}</div>}
       <footer className="controls">
         WASD — движение · Shift — бег · Пробел — прыжок · Esc — освободить мышь
       </footer>
@@ -194,7 +197,11 @@ export default function App() {
           room={room}
           open={open}
           onClose={() => setOpen(false)}
-          nearNPC={near}
+          target={dialogueTarget}
+          canInteract={
+            dialogueTarget === "players" || interaction?.target === dialogueTarget
+          }
+          atTable={interaction?.target === "all"}
           council={council}
         />
       )}

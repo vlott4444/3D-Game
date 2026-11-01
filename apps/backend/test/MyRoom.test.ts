@@ -10,6 +10,7 @@ import {
   signToken,
   verifyToken,
 } from "../src/auth/auth.service.js";
+import { chatHistory, saveChatEntry } from "../src/database/chat.repo.js";
 import { AgentService } from "../src/agents/AgentService.js";
 describe("Persistence, identity and agent pipeline", () => {
   const dir = mkdtempSync(join(tmpdir(), "island-test-"));
@@ -46,81 +47,133 @@ describe("Persistence, identity and agent pipeline", () => {
     );
     assert.throws(() => verifyToken("invalid"));
   });
-  it("calls model, carries history, isolates players and gates evidence", async () => {
+  it("remembers council tasks by player and case without reviving the old plot", async () => {
     const original = globalThis.fetch;
     const calls: any[] = [];
-    globalThis.fetch = async (_url, init) => {
-      calls.push(JSON.parse(init!.body as string));
+    globalThis.fetch = async (_url, options) => {
+      calls.push(JSON.parse(options!.body as string));
       return new Response(
         JSON.stringify({ message: { content: "Ответ тестовой модели" } }),
-        { status: 200 },
       );
     };
     try {
       const service = new AgentService();
-      await service.reply({
+      getDb()
+        .prepare("INSERT INTO dialogue(player_id,npc_id,role,content) VALUES (?,?,?,?)")
+        .run("p1", "machiavelli", "assistant", "Старое детективное показание");
+      const basic = {
         playerId: "p1",
         npcId: "machiavelli",
-        message: "Что случилось с генератором?",
-      });
+        message: "Как договориться о расписании?",
+      };
+      await service.reply(basic);
+      assert.equal(calls[0].messages.length, 2);
       assert.equal(
-        getDb()
-          .prepare("SELECT * FROM evidence WHERE player_id='p1' AND clue_id='power'")
-          .get(),
-        undefined,
+        /куратор|убийств|Старое детективное показание/.test(JSON.stringify(calls[0])),
+        false,
       );
-      assert.ok(calls[0].messages[0].content.includes("Ты скрываешь"));
-      await service.reply({
-        playerId: "p1",
-        npcId: "einstein",
-        message: "Когда ударил колокол?",
-      });
-      const answer = await service.reply({
-        playerId: "p1",
-        npcId: "machiavelli",
-        message: "Мы проверили колокол. Что с генератором?",
-      });
-      assert.equal(answer.clue?.id, "power");
-      assert.ok(calls[2].messages.length >= 4);
-      await service.reply({ playerId: "p2", npcId: "machiavelli", message: "Привет" });
+      await service.reply({ ...basic, message: "А если правило нарушат?" });
+      assert.equal(calls[1].messages.length, 4);
+      await service.reply({ ...basic, playerId: "p2" });
+      assert.equal(calls[2].messages.length, 2);
+      const visit = { id: "visit-a", name: "Мира", problem: "Как поделить воду?" };
+      await service.reply({ ...basic, caseContext: visit });
       assert.equal(calls[3].messages.length, 2);
-      const firstVisit = { id: "visit-a", name: "Мира", problem: "Как поделить воду?" };
-      const visitReply = await service.reply({
-        playerId: "p1",
-        npcId: "machiavelli",
-        message: "С чего начать?",
-        caseContext: firstVisit,
-      });
-      assert.equal(visitReply.clue, undefined);
+      await service.reply({ ...basic, caseContext: { ...visit, id: "visit-b" } });
       assert.equal(calls[4].messages.length, 2);
-      assert.ok(calls[4].messages[0].content.includes("Ты советник"));
-      await service.reply({
-        playerId: "p1",
-        npcId: "machiavelli",
-        message: "Новая проблема",
-        caseContext: { ...firstVisit, id: "visit-b" },
-      });
-      assert.equal(calls[5].messages.length, 2);
-      await service.reply({
-        playerId: "p1",
-        npcId: "machiavelli",
-        message: "Продолжим",
-        caseContext: firstVisit,
-      });
-      assert.equal(calls[6].messages.length, 4);
+      await service.reply({ ...basic, caseContext: visit });
+      assert.equal(calls[5].messages.length, 4);
       globalThis.fetch = async () => {
         throw Error("offline");
       };
-      await assert.rejects(() =>
-        service.reply({ playerId: "p1", npcId: "nightingale", message: "Вода?" }),
-      );
+      await assert.rejects(() => service.reply({ ...basic, npcId: "nightingale" }));
       assert.equal(
-        getDb().prepare("SELECT * FROM dialogue WHERE npc_id='nightingale'").get(),
+        getDb().prepare("SELECT id FROM dialogue WHERE npc_id='nightingale'").get(),
         undefined,
       );
     } finally {
       globalThis.fetch = original;
     }
+  });
+  it("gives a reacting character the actual proposal and keeps the player's original text in memory", async () => {
+    const original = globalThis.fetch;
+    let body: any;
+    globalThis.fetch = async (_url, options) => {
+      body = JSON.parse(options!.body as string);
+      return new Response(
+        JSON.stringify({
+          message: {
+            content:
+              "Макиавелли, кто выберет представителей семей и сможет проверить их решения?",
+          },
+        }),
+      );
+    };
+    try {
+      const proposal =
+        "Пусть представители разных семей вместе подтверждают выдачу воды.";
+      await new AgentService().reply({
+        playerId: "p1",
+        npcId: "socrates",
+        message: "Что скажешь?",
+        caseContext: { id: "reaction", name: "Мира", problem: "Вода" },
+        roundReplies: [{ name: "Никколо Макиавелли", text: proposal }],
+      });
+      assert.ok(body.messages.at(-1).content.includes(proposal));
+      assert.ok(body.messages.at(-1).content.includes("Никколо Макиавелли"));
+      assert.equal(
+        (
+          getDb()
+            .prepare(
+              "SELECT content FROM dialogue WHERE case_id='reaction' AND role='user'",
+            )
+            .get() as any
+        ).content,
+        "Что скажешь?",
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+  it("persists channel histories once per message and only for their recipients", () => {
+    const one = saveChatEntry(
+      {
+        speaker: "tester",
+        kind: "player",
+        text: "Общий вопрос",
+        target: "all",
+        caseId: "chat-test",
+      },
+      ["p1", "p2"],
+    );
+    saveChatEntry(
+      {
+        speaker: "Ада",
+        kind: "npc",
+        text: "Проверим условие пересмотра.",
+        target: "all",
+        caseId: "chat-test",
+        reactionTo: { name: "Макиавелли", text: "Предлагаю контроль." },
+      },
+      ["p1", "p2"],
+    );
+    saveChatEntry(
+      {
+        speaker: "Диоген",
+        kind: "npc",
+        text: "Упростим.",
+        target: "diogenes",
+        caseId: "chat-test",
+      },
+      ["p1"],
+    );
+    assert.equal(chatHistory("p1", "all", "chat-test").length, 2);
+    assert.equal(chatHistory("p2", "all", "chat-test")[0].id, one.id);
+    assert.equal(chatHistory("p2", "diogenes", "chat-test").length, 0);
+    assert.equal(chatHistory("unrelated", "all", "chat-test").length, 0);
+    closeDb();
+    initDb(path);
+    assert.equal(chatHistory("p1", "all", "chat-test")[1].reactionTo?.name, "Макиавелли");
   });
   it("does not persist a repeated or explicitly abstaining second contribution", async () => {
     const original = globalThis.fetch;

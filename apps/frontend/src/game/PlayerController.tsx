@@ -12,6 +12,7 @@ import type { GameRoom } from "../network/GameConnection";
 import Player from "./Player";
 import FollowCamera from "./FollowCamera";
 import NPCInteraction from "./npc/NPCInteraction";
+import type { InteractionTarget } from "./npc/interactionTarget";
 
 // Размеры персонажа
 const BODY_HEIGHT = 1.18;
@@ -35,8 +36,8 @@ type Props = {
   room: GameRoom;
   initialPose: { x: number; z: number; height: number; rotY: number };
   dialogueOpen: boolean;
-  onNearbyChange: (nearby: boolean) => void;
-  onInteract: () => void;
+  onNearbyChange: (target: InteractionTarget | null) => void;
+  onInteract: (target: string) => void;
 };
 
 export default function PlayerController({

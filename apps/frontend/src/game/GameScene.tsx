@@ -11,14 +11,15 @@ import RenderBudget from "./RenderBudget";
 import PlayerController from "./PlayerController";
 import type { CouncilTurn } from "../network/CouncilTurn";
 import NPC from "./npc/NPC";
+import type { InteractionTarget } from "./npc/interactionTarget";
 
 type Props = {
   room: GameRoom;
   initialPose: { x: number; z: number; height: number; rotY: number };
   dialogueOpen: boolean;
-  nearNPC: boolean;
-  onNearbyChange: (nearby: boolean) => void;
-  onInteract: () => void;
+  interaction: InteractionTarget | null;
+  onNearbyChange: (target: InteractionTarget | null) => void;
+  onInteract: (target: string) => void;
   council: CouncilTurn | null;
 };
 
@@ -26,7 +27,7 @@ export default function GameScene({
   room,
   initialPose,
   dialogueOpen,
-  nearNPC,
+  interaction,
   onNearbyChange,
   onInteract,
   council,
@@ -77,7 +78,7 @@ export default function GameScene({
             <NPC
               key={person.id}
               person={person}
-              playerNearby={nearNPC}
+              playerNearby={interaction?.target === person.id}
               speaking={!!council?.active && council.currentNpcId === person.id}
             />
           ))}
