@@ -474,3 +474,53 @@ textarea:focus {
     font-size: 10px;
   }
 }
+
+.hud {
+  flex-wrap: wrap;
+}
+.world-feedback {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  top: 100px;
+  transform: translateX(-50%);
+  max-width: min(680px, 90vw);
+  padding: 10px 16px;
+  border: 1px solid #789081;
+  border-radius: 9px;
+  background: #1f493fee;
+  color: #e6edd8;
+  pointer-events: none;
+}
+.world-label {
+  display: block;
+  white-space: nowrap;
+  background: #294b43;
+  color: #fff1cf;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font: 12px Arial;
+  pointer-events: none;
+}
+.world-tools {
+  border-bottom: 1px solid #3d5b60;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+.world-tool-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.world-tool-buttons button {
+  font-size: 12px;
+  padding: 7px 9px;
+}
+.bubble.world {
+  border-left-color: #8dbd8e;
+  background: #25493f;
+}
+.bubble.world .bubble-speaker {
+  color: #bddaba;
+}

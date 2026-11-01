@@ -6,6 +6,7 @@ import RemotePlayers from "./RemotePlayers";
 import { Physics } from "@react-three/rapier";
 
 import Visitor from "./npc/Visitor";
+import AmbientCrowd from "./npc/AmbientCrowd";
 import World from "./World";
 import RenderBudget from "./RenderBudget";
 import PlayerController from "./PlayerController";
@@ -72,6 +73,7 @@ export default function GameScene({
           {/* Игровой мир */}
           <World room={room} initialPose={initialPose} />
           <Visitor room={room} />
+          <AmbientCrowd room={room} />
 
           {/* NPC с анимациями */}
           {cast.map((person) => (

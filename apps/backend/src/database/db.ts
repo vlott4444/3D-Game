@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { seedVisitors } from "./visitors.seed.js";
 let db: DatabaseSync;
 export function initDb(
   path = process.env.DB_PATH ||
@@ -16,13 +17,13 @@ export function initDb(
   if (!columns.some((c) => c.name === "height"))
     db.exec("ALTER TABLE players ADD COLUMN height REAL DEFAULT 1.18");
   db.exec(`CREATE TABLE IF NOT EXISTS dialogue (id INTEGER PRIMARY KEY, player_id TEXT NOT NULL, npc_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL);
-    CREATE INDEX IF NOT EXISTS dialogue_lookup ON dialogue(player_id,npc_id,id);
-    CREATE TABLE IF NOT EXISTS evidence (player_id TEXT NOT NULL, clue_id TEXT NOT NULL, PRIMARY KEY(player_id,clue_id));`);
+    CREATE INDEX IF NOT EXISTS dialogue_lookup ON dialogue(player_id,npc_id,id);`);
   const dialogueColumns = db.prepare("PRAGMA table_info(dialogue)").all() as {
     name: string;
   }[];
   if (!dialogueColumns.some((c) => c.name === "case_id"))
     db.exec("ALTER TABLE dialogue ADD COLUMN case_id TEXT");
+  seedVisitors(db);
   return db;
 }
 export function getDb() {

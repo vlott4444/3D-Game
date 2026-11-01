@@ -1,28 +1,10 @@
 import { randomUUID } from "node:crypto";
-const problems = [
-  {
-    name: "Мира, смотрительница",
-    problem:
-      "В лагере осталось три бочки питьевой воды на пять семей. Люди спорят, кому выдавать воду первым. Помогите собрать недостающие сведения и договориться о справедливом временном порядке.",
-  },
-  {
-    name: "Лев, мастер",
-    problem:
-      "Общий генератор выдерживает только две мастерские одновременно. Все хотят работать вечером. Мне нужен понятный график, который жители смогут проверить и пересмотреть.",
-  },
-  {
-    name: "Ника, ученица",
-    problem:
-      "Два свидетеля называют разное время одного события, а часы на острове отставали. Я боюсь обвинить невиновного. Как составить проверяемую последовательность событий?",
-  },
-  {
-    name: "Самир, библиотекарь",
-    problem:
-      "Жители хотят проложить короткую дорогу через сад, а садовники против. Как сравнить варианты и организовать обсуждение без ссоры?",
-  },
-];
+import { drawVisitor, type VisitorRecord } from "../database/visitors.repo.js";
 export type Visit = {
   id: string;
+  catalogId: string;
+  category: string;
+  role: string;
   name: string;
   problem: string;
   phase: "arriving" | "discussing" | "leaving";
@@ -31,13 +13,24 @@ export type Visit = {
 };
 export class VisitorManager {
   current: Visit | null = null;
-  private cursor = 0;
-  call(now: number) {
+  constructor(
+    private readonly draw: (
+      players: string[],
+      visitKey: string,
+      now: number,
+    ) => VisitorRecord = drawVisitor,
+  ) {}
+  call(now: number, players: string[] = []) {
     if (this.current) throw Error("Сначала заверши текущий приём");
-    const problem = problems[this.cursor++ % problems.length];
+    const id = randomUUID();
+    const selected = this.draw(players, id, now);
     this.current = {
-      ...problem,
-      id: randomUUID(),
+      name: `${selected.name}, ${selected.role}`,
+      problem: selected.problem,
+      catalogId: selected.id,
+      category: selected.category,
+      role: selected.role,
+      id,
       phase: "arriving",
       startedAt: now,
       replies: 0,

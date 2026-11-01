@@ -23,7 +23,13 @@ describe("Procedural streaming and visitor lifecycle", () => {
     }
   });
   it("admits one visitor, requires a discussion, and removes a departing visitor", () => {
-    const manager = new VisitorManager();
+    const manager = new VisitorManager(() => ({
+      id: "test-visitor",
+      name: "Мира",
+      role: "смотрительница",
+      category: "resources",
+      problem: "Распределить воду",
+    }));
     manager.call(1000);
     const id = manager.current!.id;
     assert.throws(() => manager.call(1001));

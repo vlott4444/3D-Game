@@ -373,6 +373,37 @@ export default function DialoguePanel({
                 )}
               </section>
             )}
+            <section className="world-tools">
+              <h3>Изменить двор</h3>
+              <p>
+                Попроси мудреца создать, перенести или убрать объект. Изменение увидят все
+                игроки.
+              </p>
+              <div className="world-tool-buttons">
+                {[
+                  ["Доска идей", "Создай доску идей"],
+                  ["Скамейки", "Поставь скамейки"],
+                  ["Питьевой пункт", "Создай питьевой пункт"],
+                  ["Сад", "Посади сад"],
+                ].map(([label, command]) => (
+                  <button
+                    type="button"
+                    key={label}
+                    className="button-quiet"
+                    onClick={() => {
+                      setMessage(command);
+                      input.current?.focus();
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <small>
+                Кнопка подставляет просьбу. Отправь её выбранному мудрецу или совету.
+                Например: «Переставь скамейки».
+              </small>
+            </section>
             <details className="council-roster">
               <summary>Кто в совете</summary>
               {cast.map((member) => (

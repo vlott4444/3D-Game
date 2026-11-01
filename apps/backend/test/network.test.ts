@@ -5,6 +5,7 @@ import app from "../src/app.config.js";
 import { initDb, closeDb } from "../src/database/db.js";
 import { findByUsername, saveState } from "../src/database/players.repo.js";
 import { cast } from "../src/agents/cast.js";
+import { worldRevision } from "../src/world/WorldActions.js";
 const port = 2568;
 const endpoint = `http://127.0.0.1:${port}`;
 function message(room: any, type: string) {
@@ -293,5 +294,119 @@ describe("Authenticated WebSocket flow", function () {
     a.send("visitor_action", { action: "finish" });
     assert.equal((await leaving).phase, "leaving");
     assert.equal(await message(a, "visitor_state"), null);
+  });
+  it("lets a named agent change the world for two clients and a late joiner, but not from player chat", async () => {
+    await walkTo(a, 0, 0);
+    const snapshots = [message(a, "world_snapshot"), message(b, "world_snapshot")];
+    const done = message(a, "dialogue_done");
+    a.send("chat", {
+      target: "all",
+      text: "Ада, создай доску идей",
+      requestId: "build-board",
+    });
+    const views = await Promise.all(snapshots);
+    await done;
+    for (const view of views) {
+      const edit = view.chunks
+        .flatMap((c: any) => c.edits || [])
+        .find((e: any) => e.kind === "board");
+      assert.ok(edit);
+      assert.equal(edit.agentId, "lovelace");
+    }
+    assert.ok(
+      JSON.stringify(modelRequests.at(-1)).includes("Подтверждённый результат сервера"),
+    );
+    const revision = worldRevision();
+    const playersDone = message(a, "dialogue_done");
+    a.send("chat", {
+      target: "players",
+      text: "Создай сад",
+      requestId: "no-agent-build",
+    });
+    await playersDone;
+    assert.equal(worldRevision(), revision);
+    const registration = await fetch(`${endpoint}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "late_builder_observer",
+        password: "test-pass-123",
+      }),
+    });
+    const sdk = new ColyseusSDK(endpoint);
+    sdk.auth.token = (await registration.json()).token;
+    const late = await sdk.joinOrCreate("my_room");
+    try {
+      await ready(late);
+      const loaded = message(late, "world_snapshot");
+      late.send("world_request", {});
+      assert.ok(
+        (await loaded).chunks
+          .flatMap((c: any) => c.edits || [])
+          .some((e: any) => e.kind === "board"),
+      );
+    } finally {
+      await late.leave();
+    }
+  });
+  it("streams one shared reactive crowd in the local window and reacts to speech, waving and food", async () => {
+    const callsBefore = modelRequests.length;
+    await walkTo(a, 0, 18);
+    const initial = [message(a, "ambient_snapshot"), message(b, "ambient_snapshot")];
+    a.send("ambient_request", {});
+    b.send("ambient_request", {});
+    await Promise.all(initial);
+    const [one, two] = await Promise.all([
+      message(a, "ambient_snapshot"),
+      message(b, "ambient_snapshot"),
+    ]);
+    assert.equal(one.actors.length, 162);
+    assert.deepEqual(one.actors, two.actors);
+    const feedback = message(a, "world_feedback");
+    a.send("ambient_action", { action: "wave" });
+    await feedback;
+    let state = await message(a, "ambient_snapshot");
+    assert.ok(
+      state.actors.some((actor: any) => actor.kind === "human" && actor.mode === "look"),
+    );
+    const said = message(a, "dialogue_done");
+    a.send("chat", {
+      target: "players",
+      text: "Привет всем вокруг",
+      requestId: "talk-to-crowd",
+    });
+    await said;
+    state = await message(a, "ambient_snapshot");
+    assert.ok(state.actors.some((actor: any) => actor.mode === "look"));
+    await new Promise((resolve) => setTimeout(resolve, 6600));
+    const foodFeedback = message(a, "world_feedback");
+    a.send("ambient_action", { action: "feed" });
+    await foodFeedback;
+    state = await message(a, "ambient_snapshot");
+    assert.equal(state.food.length, 1);
+    assert.ok(
+      state.actors.some((actor: any) => actor.kind === "deer" && actor.mode === "eat"),
+    );
+    assert.equal(modelRequests.length, callsBefore);
+  });
+  it("keeps the same council room after all players leave and reconnect", async () => {
+    const roomId = a.roomId;
+    await a.leave();
+    await b.leave();
+    a = b = undefined;
+    const response = await fetch(`${endpoint}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "returning-council-player",
+        password: "test-pass-123",
+      }),
+    });
+    assert.equal(response.status, 200);
+    const client = new ColyseusSDK(endpoint);
+    client.auth.token = (await response.json()).token;
+    a = await client.joinOrCreate("my_room");
+    await ready(a);
+    assert.equal(a.roomId, roomId);
   });
 });

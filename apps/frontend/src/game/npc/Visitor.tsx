@@ -6,6 +6,8 @@ import type { GameRoom } from "../../network/GameConnection";
 export type VisitorState = {
   id: string;
   name: string;
+  catalogId?: string;
+  category?: string;
   problem: string;
   phase: "arriving" | "discussing" | "leaving";
   progress: number;
@@ -47,7 +49,17 @@ export default function Visitor({ room }: { room: GameRoom }) {
     <group ref={body}>
       <mesh position={[0, 1.05, 0]} castShadow>
         <boxGeometry args={[0.7, 1.05, 0.4]} />
-        <meshStandardMaterial color="#b8834c" />
+        <meshStandardMaterial
+          color={
+            visitor.category === "ecology"
+              ? "#668459"
+              : visitor.category === "education"
+                ? "#866c9b"
+                : visitor.category === "energy"
+                  ? "#658398"
+                  : "#b8834c"
+          }
+        />
       </mesh>
       <mesh position={[0, 1.85, 0]} castShadow>
         <sphereGeometry args={[0.3, 14, 12]} />
@@ -62,7 +74,17 @@ export default function Visitor({ room }: { room: GameRoom }) {
       {[-0.45, 0.45].map((x) => (
         <mesh key={x} position={[x, 1.04, 0]} castShadow>
           <boxGeometry args={[0.18, 0.8, 0.24]} />
-          <meshStandardMaterial color="#b8834c" />
+          <meshStandardMaterial
+            color={
+              visitor.category === "ecology"
+                ? "#668459"
+                : visitor.category === "education"
+                  ? "#866c9b"
+                  : visitor.category === "energy"
+                    ? "#658398"
+                    : "#b8834c"
+            }
+          />
         </mesh>
       ))}
       <Html center position={[0, 2.5, 0]}>

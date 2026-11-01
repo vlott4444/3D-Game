@@ -9,13 +9,19 @@ import { VisitorManager } from "../agents/VisitorManager.js";
 import { CouncilDirector, type CouncilTurn } from "../agents/CouncilDirector.js";
 import { canInteractAt } from "../world/InteractionZones.js";
 import { saveChatEntry, chatHistory, type ChatEntry } from "../database/chat.repo.js";
-
+import { AmbientWorld, type AmbientPlayer } from "../world/AmbientWorld.js";
+import {
+  applyWorldCommand,
+  classifyWorldCommand,
+  listWorldEdits,
+  onWorldChange,
+  worldRevision,
+} from "../world/WorldActions.js";
+import { rememberCurrentVisitor } from "../database/visitors.repo.js";
 const online = new Set<string>();
-
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 8;
   state = new MyRoomState();
-
   private busy = new Set<string>();
   private lastPose = new Map<string, number>();
   private discussion: string[] = [];
@@ -23,18 +29,78 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private visitors = new VisitorManager();
   private council = new CouncilDirector();
   private councilTurn: CouncilTurn | null = null;
-
+  private ambient = new AmbientWorld();
+  private ambientSubscribers = new Set<string>();
+  private motion = new Map<
+    string,
+    { speed: number; dx: number; dz: number; at: number }
+  >();
+  private lastGesture = new Map<string, number>();
+  private offWorld?: () => void;
+  private lastAmbient = Date.now();
+  private ambientStep = 0;
+  private updateAmbient(now: number) {
+    const players: AmbientPlayer[] = [];
+    for (const [sessionId, player] of this.state.players) {
+      const m = this.motion.get(sessionId);
+      const recent = m && now - m.at < 600;
+      players.push({
+        id: sessionId,
+        x: player.x,
+        z: player.y,
+        speed: recent ? m.speed : 0,
+        dx: recent ? m.dx : 0,
+        dz: recent ? m.dz : 0,
+      });
+    }
+    const obstacles = listWorldEdits().map((edit) => ({
+      x: edit.x,
+      z: edit.z,
+      radius: edit.kind === "garden" ? 3 : edit.kind === "benches" ? 4.5 : 1.2,
+    }));
+    this.ambient.update(
+      players,
+      now,
+      Math.min(0.2, (now - this.lastAmbient) / 1000),
+      obstacles,
+    );
+    this.lastAmbient = now;
+  }
   onCreate() {
-    // 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Запрещаем серверу удалять комнату, когда в ней никого нет.
-    // Это гарантирует, что второй игрок зайдет в ту же самую комнату, а не создаст новую.
+    // Keep the shared council room available when its last player disconnects.
     this.autoDispose = false;
-
+    this.offWorld = onWorldChange((change) => {
+      for (const client of this.clients) {
+        const p = this.state.players.get(client.sessionId);
+        if (!p) continue;
+        const c = chunkAt(p.x, p.y);
+        if (
+          [change.edit, change.previous].some(
+            (edit) =>
+              edit &&
+              Math.abs(Math.floor(edit.x / 64) - c.cx) <= 1 &&
+              Math.abs(Math.floor(edit.z / 64) - c.cz) <= 1,
+          )
+        )
+          this.streamWorld(client, true);
+      }
+      this.broadcast("world_feedback", { text: change.text, revision: change.revision });
+    });
+    this.clock.setInterval(() => {
+      const now = Date.now();
+      this.updateAmbient(now);
+      if (++this.ambientStep % 2 === 0)
+        for (const client of this.clients)
+          if (this.ambientSubscribers.has(client.sessionId)) {
+            const p = this.state.players.get(client.sessionId);
+            if (p) client.send("ambient_snapshot", this.ambient.snapshot(p.x, p.y, now));
+          }
+    }, 100);
     this.clock.setInterval(() => {
       if (this.visitors.advance(Date.now()))
         this.broadcast("visitor_state", this.visitors.snapshot());
     }, 250);
   }
-
   private streamWorld(client: Client, force = false) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -42,19 +108,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = `${center.cx}:${center.cz}`;
     if (force || this.streamedChunks.get(client.sessionId) !== id) {
       this.streamedChunks.set(client.sessionId, id);
-      client.send("world_snapshot", worldSnapshot(player.x, player.y));
+      client.send(
+        "world_snapshot",
+        worldSnapshot(player.x, player.y, listWorldEdits(), worldRevision()),
+      );
     }
   }
-
   private canTalk(client: Client, target: string) {
     const player = this.state.players.get(client.sessionId);
     return !!player && canInteractAt(player.x, player.y, target);
   }
-
   private historyCase(target: string) {
     return target === "players" ? "players" : this.visitors.current?.id || "open-council";
   }
-
   private publish(entry: ChatEntry, ownerId: string) {
     const saved = saveChatEntry(entry, [
       ownerId,
@@ -63,23 +129,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("dialogue", saved);
     return saved;
   }
-
   static async onAuth(token: string) {
     const auth = verifyToken(token);
     if (!findById(auth.playerId)) throw Error("Игрок не найден");
     return auth;
   }
-
   onJoin(client: Client) {
     const id = client.auth.playerId;
-    // Эта проверка не даст зайти двум игрокам с ОДНИМ аккаунтом.
-    // Для теста создавайте разные аккаунты (player1, player2).
     if (online.has(id)) {
       client.leave(4001, "Этот аккаунт уже в игре");
       return;
     }
     online.add(id);
-
+    if (this.visitors.current) rememberCurrentVisitor(id, this.visitors.current.id);
     const row = findById(id)!;
     const saved =
       row.last_seen != null &&
@@ -87,7 +149,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       Number.isFinite(row.pos_y) &&
       Math.abs(row.pos_x) < 10000000 &&
       Math.abs(row.pos_y) < 10000000;
-
     const p = new Player({
       x: saved ? row.pos_x : 0,
       y: saved ? row.pos_y : 0,
@@ -97,14 +158,46 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       vx: 0,
       vy: 0,
     });
-
     this.state.players.set(client.sessionId, p);
     this.lastPose.set(client.sessionId, Date.now() - 100);
   }
-
   messages = {
+    ambient_request: (client: Client) => {
+      this.ambientSubscribers.add(client.sessionId);
+      const now = Date.now();
+      this.updateAmbient(now);
+      const p = this.state.players.get(client.sessionId);
+      if (p) client.send("ambient_snapshot", this.ambient.snapshot(p.x, p.y, now));
+    },
+    ambient_action: (client: Client, message: { action?: string }) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || !["wave", "feed"].includes(message?.action || "")) return;
+      const now = Date.now(),
+        cooldown = message.action === "feed" ? 6500 : 1800;
+      const gestureKey = `${client.sessionId}:${message.action}`;
+      if (now - (this.lastGesture.get(gestureKey) || 0) < cooldown) return;
+      if (message.action === "feed" && Math.abs(p.x) < 16 && Math.abs(p.y) < 16) {
+        client.send("world_feedback", {
+          text: "Угощение для животных можно оставить снаружи зала.",
+        });
+        return;
+      }
+      this.lastGesture.set(gestureKey, now);
+      this.ambient.stimulate(
+        client.sessionId,
+        message.action as "wave" | "feed",
+        p.x - (message.action === "feed" ? Math.sin(p.rotY) * 1.4 : 0),
+        p.y - (message.action === "feed" ? Math.cos(p.rotY) * 1.4 : 0),
+        now,
+      );
+      client.send("world_feedback", {
+        text:
+          message.action === "feed"
+            ? "Угощение оставлено рядом. Ближайшие олени могут подойти."
+            : "Ты позвал жителей. Те, кто рядом, оборачиваются.",
+      });
+    },
     council_request: (client: Client) => client.send("council_turn", this.councilTurn),
-
     return_to_hall: (client: Client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
@@ -119,21 +212,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.y = 8;
       player.height = 1.18;
       player.rotY = 0;
+      this.motion.delete(client.sessionId);
       this.lastPose.set(client.sessionId, Date.now() - 100);
       this.streamWorld(client, true);
       client.send("spawn", { x: 0, z: 8, height: 1.18, rotY: 0 });
     },
-
     world_request: (client: Client) => this.streamWorld(client, true),
-
     visitor_request: (client: Client) =>
       client.send("visitor_state", this.visitors.snapshot()),
-
     visitor_action: (client: Client, message: { action?: string }) => {
       try {
         if (!this.canTalk(client, "all")) throw Error("Подойди к столу совета");
         if (this.busy.size) throw Error("Дождись окончания обсуждения");
-        if (message?.action === "call") this.visitors.call(Date.now());
+        if (message?.action === "call")
+          this.visitors.call(
+            Date.now(),
+            this.clients.map((c) => c.auth.playerId),
+          );
         else if (message?.action === "finish") this.visitors.finish(Date.now());
         else throw Error("Неизвестное действие");
         this.discussion = [];
@@ -145,7 +240,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("visitor_error", { text: (e as Error).message });
       }
     },
-
     dialogue_history: (client: Client, message: { target?: string }) => {
       const target = message?.target || "all";
       if (
@@ -161,13 +255,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         history: chatHistory(client.auth.playerId, target, caseId),
       });
     },
-
-    case_history: (client: Client) =>
-      client.send("case_history", {
-        history: chatHistory(client.auth.playerId, "all", this.historyCase("all")),
-        evidence: {},
-      }),
-
     pose: (client: Client, m: unknown) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || !m || typeof m !== "object") return;
@@ -192,12 +279,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("spawn", { x: p.x, z: p.y, height: p.height, rotY: p.rotY });
         return;
       }
+      // Commit before acknowledgement: only an acknowledged pose is guaranteed durable.
       saveState(client.auth.playerId, {
         roomId: this.roomId,
         posX: v.x,
         posY: v.z,
         rotY: v.rotY,
         height: v.height,
+      });
+      const distance = Math.hypot(v.x - p.x, v.z - p.y);
+      this.motion.set(client.sessionId, {
+        speed: Math.min(12, distance / Math.max(elapsed, 0.08)),
+        dx: distance ? (v.x - p.x) / distance : 0,
+        dz: distance ? (v.z - p.y) / distance : 0,
+        at: now,
       });
       p.x = v.x;
       p.y = v.z;
@@ -207,7 +302,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("pose_saved", { seq: v.seq });
       this.streamWorld(client);
     },
-
     chat: async (client: Client, m: unknown) => {
       if (!m || typeof m !== "object") return;
       const { text, target, requestId } = m as Record<string, unknown>;
@@ -305,8 +399,30 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           },
           client.auth.playerId,
         );
+        this.ambient.stimulate(client.sessionId, "talk", p.x, p.y, Date.now());
+        let worldUpdate: string | undefined;
+        const build = target !== "players" ? classifyWorldCommand(text) : null;
+        if (build && participants.length) {
+          const builder = participants[0];
+          const result = applyWorldCommand(build, builder.id, client.auth.playerId);
+          worldUpdate = result.text;
+          this.publish(
+            {
+              target: target as string,
+              caseId,
+              speaker: `Окружение · ${builder.name}`,
+              text: result.text,
+              kind: "world",
+              npcId: builder.id,
+              requestId,
+            },
+            client.auth.playerId,
+          );
+        }
         this.discussion.push(`${p.username}: ${text}`);
         this.discussion = this.discussion.slice(-12);
+        // Keep the older conversation stable; a separate bounded quote identifies
+        // the current proposal that the next participant should evaluate.
         const roundContext = this.discussion.join("\n");
         for (const npc of participants) {
           const reactionTo = roundReplies.at(-1);
@@ -321,6 +437,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
               message: text,
               context: roundContext,
               roundReplies,
+              worldUpdate,
               caseContext: visit
                 ? { id: visit.id, name: visit.name, problem: visit.problem }
                 : undefined,
@@ -382,7 +499,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     },
   };
-
+  onDispose() {
+    this.offWorld?.();
+  }
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     if (p) {
@@ -398,5 +517,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.players.delete(client.sessionId);
     this.lastPose.delete(client.sessionId);
     this.streamedChunks.delete(client.sessionId);
+    this.ambientSubscribers.delete(client.sessionId);
+    this.motion.delete(client.sessionId);
+    this.lastGesture.delete(`${client.sessionId}:wave`);
+    this.lastGesture.delete(`${client.sessionId}:feed`);
   }
 }

@@ -9,6 +9,7 @@ type Request = {
   message: string;
   context?: string;
   caseContext?: { id: string; name: string; problem: string };
+  worldUpdate?: string;
   roundReplies?: { name: string; text: string }[];
 };
 type Reply = { text: string; abstained?: boolean };
@@ -84,6 +85,8 @@ export class AgentService {
     const system = `Ты ${profile.name}, участник игры «Совет мудрецов». Это художественная интерпретация.
 Характер: ${profile.personality}. Ты помогаешь разбирать задачи и аргументы.
 ${character}
+Изменения окружения выполняет сервер. Не утверждай, что создал или удалил объект, если ниже нет подтверждения.
+Подтверждённый результат сервера: ${r.worldUpdate || "изменений по этому сообщению нет"}
 Контекст задачи: ${caseContext.name}. ${caseContext.problem}
 Ответь по-русски в 1–3 коротких предложениях. Не выдумывай факты и действия игрока. Не объявляй проблему решённой за него. Учитывай историю.
 Предыдущий разговор (чужие реплики): ${r.context?.slice(-900) || "нет"}

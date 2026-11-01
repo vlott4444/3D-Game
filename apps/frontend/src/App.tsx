@@ -19,6 +19,8 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState("Ожидаем сохранения");
   const [chunkCount, setChunkCount] = useState(0);
+  const [ambientCount, setAmbientCount] = useState(0);
+  const [feedback, setFeedback] = useState("");
   const council = useCouncilTurn(room);
   useEffect(() => {
     if (!token) return;
@@ -43,6 +45,10 @@ export default function App() {
         r.onMessage("world_snapshot", (snapshot: { chunks: unknown[] }) =>
           setChunkCount(snapshot.chunks.length),
         );
+        r.onMessage("ambient_snapshot", (data: { actors: unknown[] }) =>
+          setAmbientCount(data.actors.length),
+        );
+        r.onMessage("world_feedback", (data: { text: string }) => setFeedback(data.text));
         r.onMessage("pose_saved", () =>
           setSaved(`Сохранено ${new Date().toLocaleTimeString()}`),
         );
@@ -74,6 +80,30 @@ export default function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, []);
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        !room ||
+        open ||
+        event.repeat ||
+        (event.target instanceof HTMLElement &&
+          (event.target.isContentEditable ||
+            ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)))
+      )
+        return;
+      if (event.code === "KeyG" || event.code === "KeyF") {
+        event.preventDefault();
+        room.send("ambient_action", { action: event.code === "KeyG" ? "wave" : "feed" });
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [room, open]);
   const openChat = (target: string) => {
     setDialogueTarget(target);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -164,10 +194,23 @@ export default function App() {
       <header className="hud">
         <b>Совет мудрецов</b>
         <span>
-          {room ? "В игре" : "Нет соединения"} · {saved} · Чанков: {chunkCount}/9
+          {room ? "В игре" : "Нет соединения"} · {saved} · Чанков: {chunkCount}/9 · NPC:{" "}
+          {ambientCount}
         </span>
         <button onClick={() => openChat("players")} disabled={!room}>
           Чат игроков
+        </button>
+        <button
+          disabled={!room || open}
+          onClick={() => room?.send("ambient_action", { action: "wave" })}
+        >
+          Позвать (G)
+        </button>
+        <button
+          disabled={!room || open}
+          onClick={() => room?.send("ambient_action", { action: "feed" })}
+        >
+          Угощение (F)
         </button>
         <button disabled={!room} onClick={() => room?.send("return_to_hall", {})}>
           В зал
@@ -183,6 +226,11 @@ export default function App() {
           Выйти
         </button>
       </header>
+      {feedback && (
+        <div className="world-feedback" role="status">
+          {feedback}
+        </div>
+      )}
       {error && (
         <div className="notice" role="alert">
           {error}

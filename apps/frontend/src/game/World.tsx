@@ -3,8 +3,15 @@ import { RigidBody, CuboidCollider, CylinderCollider } from "@react-three/rapier
 import { InstancedMesh, Object3D } from "three";
 import type { GameRoom } from "../network/GameConnection";
 import Hall from "./Hall";
+import WorldChanges, { type WorldEdit } from "./world/WorldChanges";
 type WorldObject = { kind: "tree" | "rock"; x: number; z: number; scale: number };
-type Chunk = { id: string; cx: number; cz: number; objects: WorldObject[] };
+type Chunk = {
+  id: string;
+  cx: number;
+  cz: number;
+  objects: WorldObject[];
+  edits?: WorldEdit[];
+};
 type Snapshot = { chunkSize: number; chunks: Chunk[] };
 const SIZE = 64;
 function bootstrap(x: number, z: number): Snapshot {
@@ -103,6 +110,7 @@ export default function World({
       ))}
       <Grove key={snapshot.chunks.map((c) => c.id).join(",")} objects={objects} />
       <Hall />
+      <WorldChanges edits={snapshot.chunks.flatMap((chunk) => chunk.edits || [])} />
     </>
   );
 }
