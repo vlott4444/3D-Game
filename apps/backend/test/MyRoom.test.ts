@@ -60,7 +60,7 @@ describe("Persistence, identity and agent pipeline", () => {
       const service = new AgentService();
       await service.reply({
         playerId: "p1",
-        npcId: "tesla",
+        npcId: "machiavelli",
         message: "Что случилось с генератором?",
       });
       assert.equal(
@@ -77,17 +77,17 @@ describe("Persistence, identity and agent pipeline", () => {
       });
       const answer = await service.reply({
         playerId: "p1",
-        npcId: "tesla",
+        npcId: "machiavelli",
         message: "Мы проверили колокол. Что с генератором?",
       });
       assert.equal(answer.clue?.id, "power");
       assert.ok(calls[2].messages.length >= 4);
-      await service.reply({ playerId: "p2", npcId: "tesla", message: "Привет" });
+      await service.reply({ playerId: "p2", npcId: "machiavelli", message: "Привет" });
       assert.equal(calls[3].messages.length, 2);
       const firstVisit = { id: "visit-a", name: "Мира", problem: "Как поделить воду?" };
       const visitReply = await service.reply({
         playerId: "p1",
-        npcId: "tesla",
+        npcId: "machiavelli",
         message: "С чего начать?",
         caseContext: firstVisit,
       });
@@ -96,14 +96,14 @@ describe("Persistence, identity and agent pipeline", () => {
       assert.ok(calls[4].messages[0].content.includes("Ты советник"));
       await service.reply({
         playerId: "p1",
-        npcId: "tesla",
+        npcId: "machiavelli",
         message: "Новая проблема",
         caseContext: { ...firstVisit, id: "visit-b" },
       });
       assert.equal(calls[5].messages.length, 2);
       await service.reply({
         playerId: "p1",
-        npcId: "tesla",
+        npcId: "machiavelli",
         message: "Продолжим",
         caseContext: firstVisit,
       });
@@ -112,12 +112,40 @@ describe("Persistence, identity and agent pipeline", () => {
         throw Error("offline");
       };
       await assert.rejects(() =>
-        service.reply({ playerId: "p1", npcId: "curie", message: "Вода?" }),
+        service.reply({ playerId: "p1", npcId: "nightingale", message: "Вода?" }),
       );
       assert.equal(
-        getDb().prepare("SELECT * FROM dialogue WHERE npc_id='curie'").get(),
+        getDb().prepare("SELECT * FROM dialogue WHERE npc_id='nightingale'").get(),
         undefined,
       );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+  it("does not persist a repeated or explicitly abstaining second contribution", async () => {
+    const original = globalThis.fetch;
+    const same =
+      "Предлагаю сначала собрать сведения о числе людей и общем объёме доступной воды.";
+    const service = new AgentService();
+    const request = {
+      playerId: "p1",
+      npcId: "diogenes",
+      message: "Что добавишь?",
+      caseContext: { id: "echo-test", name: "Мира", problem: "Вода" },
+      roundReplies: [{ name: "Ада", text: same }],
+    };
+    try {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ message: { content: same } }));
+      assert.equal((await service.reply(request)).abstained, true);
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ message: { content: "[ВОЗДЕРЖУСЬ]" } }));
+      assert.equal((await service.reply(request)).abstained, true);
+      assert.equal(
+        getDb().prepare("SELECT id FROM dialogue WHERE case_id='echo-test'").get(),
+        undefined,
+      );
+      await assert.rejects(() => service.reply({ ...request, roundReplies: [] }));
     } finally {
       globalThis.fetch = original;
     }

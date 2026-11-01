@@ -3,6 +3,7 @@ import GameScene from "./game/GameScene";
 import DialoguePanel from "./ui/DialoguePanel";
 import { authenticate, connectToGame, type GameRoom } from "./network/GameConnection";
 import "./style.css";
+import { useCouncilTurn } from "./network/CouncilTurn";
 type Pose = { x: number; z: number; height: number; rotY: number };
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("island-token") || "");
@@ -16,6 +17,7 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState("Ожидаем сохранения");
   const [chunkCount, setChunkCount] = useState(0);
+  const council = useCouncilTurn(room);
   useEffect(() => {
     if (!token) return;
     let disposed = false;
@@ -151,6 +153,7 @@ export default function App() {
           nearNPC={near}
           onNearbyChange={setNear}
           onInteract={openChat}
+          council={council}
         />
       ) : (
         <div className="loading">Подключаемся к острову…</div>
@@ -192,6 +195,7 @@ export default function App() {
           open={open}
           onClose={() => setOpen(false)}
           nearNPC={near}
+          council={council}
         />
       )}
     </div>

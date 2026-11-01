@@ -8,6 +8,7 @@ import { agentService } from "../agents/AgentService.js";
 import { cast } from "../agents/cast.js";
 import { chunkAt, worldSnapshot } from "../world/ProceduralWorld.js";
 import { VisitorManager } from "../agents/VisitorManager.js";
+import { CouncilDirector, type CouncilTurn } from "../agents/CouncilDirector.js";
 const online = new Set<string>();
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 8;
@@ -17,6 +18,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private discussion: string[] = [];
   private streamedChunks = new Map<string, string>();
   private visitors = new VisitorManager();
+  private council = new CouncilDirector();
+  private councilTurn: CouncilTurn | null = null;
   onCreate() {
     this.clock.setInterval(() => {
       if (this.visitors.advance(Date.now()))
@@ -69,6 +72,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastPose.set(client.sessionId, Date.now() - 100);
   }
   messages = {
+    council_request: (client: Client) => client.send("council_turn", this.councilTurn),
     return_to_hall: (client: Client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
@@ -98,6 +102,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         else if (message?.action === "finish") this.visitors.finish(Date.now());
         else throw Error("Неизвестное действие");
         this.discussion = [];
+        this.council.reset();
+        this.councilTurn = null;
+        this.broadcast("council_turn", null);
         this.broadcast("visitor_state", this.visitors.snapshot());
       } catch (e) {
         client.send("visitor_error", { text: (e as Error).message });
@@ -113,7 +120,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         speaker:
           r.role === "user"
             ? client.auth.username
-            : cast.find((n) => n.id === r.npc_id)?.name || r.npc_id,
+            : cast.find((n) => n.id === r.npc_id)?.name ||
+              (
+                {
+                  curie: "Мария Кюри",
+                  tesla: "Никола Тесла",
+                  herodotus: "Геродот",
+                  holmes: "Шерлок Холмс",
+                } as Record<string, string>
+              )[r.npc_id] ||
+              r.npc_id,
         text: r.content,
         kind: r.role === "user" ? "player" : "npc",
       }));
@@ -195,8 +211,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("dialogue_done", { requestId, error: "Дождись предыдущего ответа" });
         return;
       }
-      if (target !== "players" && target !== "all" && !cast.some((n) => n.id === target))
+      if (
+        target !== "players" &&
+        target !== "all" &&
+        !cast.some((n) => n.id === target)
+      ) {
+        client.send("dialogue_done", {
+          requestId,
+          error: "Участник совета не найден. Обнови страницу и выбери адресата заново.",
+        });
         return;
+      }
+      if (target !== "players" && this.councilTurn?.active) {
+        client.send("dialogue_done", {
+          requestId,
+          error: "Совет ещё отвечает другому игроку. Дождись окончания этого хода.",
+        });
+        return;
+      }
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
       if (target !== "players" && !this.inHall(client)) {
@@ -212,6 +244,35 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return;
       }
       this.busy.add(client.sessionId);
+      const selected =
+        target === "players"
+          ? []
+          : target === "all"
+            ? this.council.select(text, visit?.problem).speakers
+            : [target as string];
+      const participants = selected.map((id) => cast.find((person) => person.id === id)!);
+      const roundReplies: { name: string; text: string }[] = [];
+      const spoken: string[] = [];
+      const turn: CouncilTurn | null = participants.length
+        ? {
+            requestId,
+            active: true,
+            currentNpcId: null,
+            members: participants.map(({ id, name, title }) => ({
+              id,
+              name,
+              title,
+              status: "waiting",
+            })),
+            silent: cast
+              .filter((person) => !selected.includes(person.id))
+              .map(({ id, name, title }) => ({ id, name, title })),
+          }
+        : null;
+      if (turn) {
+        this.councilTurn = turn;
+        this.broadcast("council_turn", turn);
+      }
       this.broadcast("dialogue", {
         speaker: p.username,
         text,
@@ -220,20 +281,34 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
       this.discussion.push(`${p.username}: ${text}`);
       this.discussion = this.discussion.slice(-12);
+      // All selected people see the same previous conversation, not a growing chain
+      // of this turn's replies, which small models tend to imitate.
+      const roundContext = this.discussion.join("\n");
       try {
-        for (const npc of target === "players"
-          ? []
-          : cast.filter((n) => target === "all" || n.id === target)) {
+        for (const npc of participants) {
+          const member = turn!.members.find((person) => person.id === npc.id)!;
+          member.status = "thinking";
+          turn!.currentNpcId = npc.id;
+          this.broadcast("council_turn", turn);
           try {
             const answer = await agentService.reply({
               playerId: client.auth.playerId,
               npcId: npc.id,
               message: text,
-              context: this.discussion.join("\n"),
+              context: roundContext,
+              roundReplies,
               caseContext: visit
                 ? { id: visit.id, name: visit.name, problem: visit.problem }
                 : undefined,
             });
+            if (answer.abstained) {
+              member.status = "abstained";
+              this.broadcast("council_turn", turn);
+              continue;
+            }
+            member.status = "answered";
+            roundReplies.push({ name: npc.name, text: answer.text });
+            spoken.push(npc.id);
             this.broadcast("dialogue", {
               speaker: npc.name,
               npcId: npc.id,
@@ -254,6 +329,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
               this.broadcast("evidence", answer.clue);
             }
           } catch (e) {
+            member.status = "error";
             console.error("NPC failure", npc.id, e);
             this.broadcast("dialogue", {
               speaker: npc.name,
@@ -264,6 +340,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           }
         }
       } finally {
+        if (turn) {
+          turn.active = false;
+          turn.currentNpcId = null;
+          this.council.finish(spoken);
+          this.broadcast("council_turn", turn);
+        }
         this.busy.delete(client.sessionId);
         client.send("dialogue_done", { requestId });
         this.broadcast("visitor_state", this.visitors.snapshot());

@@ -9,6 +9,7 @@ import Visitor from "./npc/Visitor";
 import World from "./World";
 import RenderBudget from "./RenderBudget";
 import PlayerController from "./PlayerController";
+import type { CouncilTurn } from "../network/CouncilTurn";
 import NPC from "./npc/NPC";
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   nearNPC: boolean;
   onNearbyChange: (nearby: boolean) => void;
   onInteract: () => void;
+  council: CouncilTurn | null;
 };
 
 export default function GameScene({
@@ -27,10 +29,11 @@ export default function GameScene({
   nearNPC,
   onNearbyChange,
   onInteract,
+  council,
 }: Props) {
   return (
     <Canvas
-      frameloop="demand"
+      frameloop="never"
       dpr={[1, 1.25]}
       shadows
       camera={{
@@ -40,6 +43,8 @@ export default function GameScene({
       style={{
         width: "100%",
         height: "100%",
+        isolation: "isolate",
+        zIndex: 0,
       }}
     >
       <RenderBudget dialogueOpen={dialogueOpen} />
@@ -69,7 +74,12 @@ export default function GameScene({
 
           {/* NPC с анимациями */}
           {cast.map((person) => (
-            <NPC key={person.id} person={person} playerNearby={nearNPC} />
+            <NPC
+              key={person.id}
+              person={person}
+              playerNearby={nearNPC}
+              speaking={!!council?.active && council.currentNpcId === person.id}
+            />
           ))}
           <RemotePlayers room={room} />
 
