@@ -24,7 +24,8 @@ export default function App() {
   const [saved, setSaved] = useState("Ожидаем сохранения");
   const [chunkCount, setChunkCount] = useState(0);
 
-  // 🔥 NEW: Состояние для открытия/закрытия админки
+  // Стейт для проверки прав администратора
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
 
   const council = useCouncilTurn(room);
@@ -34,6 +35,7 @@ export default function App() {
     if (!token) return;
     let disposed = false;
     let active: GameRoom | null = null;
+
     connectToGame(token)
       .then((r) => {
         if (disposed) {
@@ -50,12 +52,21 @@ export default function App() {
         };
         ready(r.state);
         r.onStateChange(ready);
+
+        // Слушаем метрики и сохранение
         r.onMessage("world_snapshot", (snapshot: { chunks: unknown[] }) =>
           setChunkCount(snapshot.chunks.length),
         );
         r.onMessage("pose_saved", () =>
           setSaved(`Сохранено ${new Date().toLocaleTimeString()}`),
         );
+
+        // 🔥 СЛУШАЕМ СИГНАЛ О ТОМ, ЧТО МЫ АДМИН
+        r.onMessage("is_admin", () => {
+          console.log("Вы назначены администратором сервера");
+          setIsAdmin(true);
+        });
+
         r.onLeave(() => {
           if (!disposed) {
             setError("Соединение закрыто. Перезайди, чтобы восстановить позицию.");
@@ -189,9 +200,12 @@ export default function App() {
           В зал
         </button>
 
-         <button onClick={() => setShowAdmin(true)}>
-          Админка
-        </button>
+         {/* 🔥 Кнопка видна только администратору */}
+         {isAdmin && (
+           <button onClick={() => setShowAdmin(true)}>
+             Админка
+           </button>
+         )}
 
         <button
           onClick={() => {
@@ -231,7 +245,7 @@ export default function App() {
         />
       )}
 
-      {/* 🔥 NEW: Рендерим саму панель администратора */}
+      {/* Рендерим панель администратора поверх всего, если нажали кнопку */}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
 
     </div>

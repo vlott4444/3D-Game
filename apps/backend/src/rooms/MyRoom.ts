@@ -24,6 +24,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private visitors = new VisitorManager();
   private council = new CouncilDirector();
   private councilTurn: CouncilTurn | null = null;
+  private adminPlayerId: string | null = null;
 
   onCreate() {
     this.autoDispose = false;
@@ -71,8 +72,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   onJoin(client: Client) {
     const id = client.auth.playerId;
-    // Эта проверка не даст зайти двум игрокам с ОДНИМ аккаунтом.
-    // Для теста создавайте разные аккаунты (player1, player2).
+
+    if (!this.adminPlayerId) {
+      this.adminPlayerId = id;
+      client.send("is_admin", true);
+      console.log(`[SERVER] ${client.auth.username} назначен администратором`);
+  }
+
     if (online.has(id)) {
       client.leave(4001, "Этот аккаунт уже в игре");
       return;
@@ -397,6 +403,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   };
 
   onLeave(client: Client) {
+
+    if (client.auth.playerId === this.adminPlayerId) {
+      this.adminPlayerId = null; // Сбрасываем админа, если он вышел
+      console.log(`[SERVER] Администратор покинул игру`);
+  }
+
     const p = this.state.players.get(client.sessionId);
     if (p) {
       saveState(client.auth.playerId, {
