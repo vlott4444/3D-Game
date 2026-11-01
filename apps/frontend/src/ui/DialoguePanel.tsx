@@ -2,19 +2,22 @@ import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import type { GameRoom } from "../network/GameConnection";
 import { cast } from "../game/npc/cast";
 import type { VisitorState } from "../game/npc/Visitor";
+import type { CouncilTurn } from "../network/CouncilTurn";
 type Entry = { speaker: string; text: string; kind: string; npcId?: string };
 export default function DialoguePanel({
   room,
   open,
   onClose,
   nearNPC,
+  council,
 }: {
   room: GameRoom;
   open: boolean;
   onClose: () => void;
   nearNPC: boolean;
+  council: CouncilTurn | null;
 }) {
-  const [target, setTarget] = useState("einstein");
+  const [target, setTarget] = useState("all");
   const [message, setMessage] = useState("");
   const [history, setHistory] = useState<Entry[]>([]);
   const [busy, setBusy] = useState(false);
@@ -51,7 +54,7 @@ export default function DialoguePanel({
   }, [history, open]);
   function send(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!message.trim() || busy) return;
+    if (!message.trim() || busy || (target !== "players" && council?.active)) return;
     setError("");
     request.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setBusy(true);
@@ -86,7 +89,11 @@ export default function DialoguePanel({
             <button
               type="button"
               disabled={
-                busy || !nearNPC || visitor.phase !== "discussing" || visitor.replies < 1
+                busy ||
+                council?.active ||
+                !nearNPC ||
+                visitor.phase !== "discussing" ||
+                visitor.replies < 1
               }
               onClick={() => room.send("visitor_action", { action: "finish" })}
             >
@@ -101,7 +108,7 @@ export default function DialoguePanel({
             </p>
             <button
               type="button"
-              disabled={busy || !nearNPC}
+              disabled={busy || !!council?.active || !nearNPC}
               onClick={() => room.send("visitor_action", { action: "call" })}
             >
               Пригласить посетителя
@@ -123,13 +130,56 @@ export default function DialoguePanel({
         disabled={busy}
       >
         <option value="players">Игрокам комнаты</option>
-        <option value="all">Всем шести мудрецам по очереди</option>
+        <option value="all">Совету — отвечают подходящие участники</option>
         {cast.map((n) => (
           <option key={n.id} value={n.id}>
-            {n.name}
+            {n.name} · {n.title}
           </option>
         ))}
       </select>
+      <small className="muted">
+        По теме отвечают 1–3 участника. Напиши «Ада и Сократ, …» или «Пусть ответят
+        остальные», чтобы сменить собеседников.
+      </small>
+      <details className="council-roster">
+        <summary>Кто в совете и чем поможет</summary>
+        {cast.map((person) => (
+          <p key={person.id}>
+            <b>
+              {person.name} · {person.title}
+            </b>
+            <br />
+            {person.summary}
+          </p>
+        ))}
+      </details>
+      {council && (
+        <div className="council-status" aria-live="polite">
+          <b>{council.active ? "Этот ход совета" : "Последний ход совета"}</b>
+          <div className="council-members">
+            {council.members.map((person) => (
+              <span key={person.id} data-status={person.status}>
+                {person.name}:{" "}
+                {
+                  {
+                    waiting: "в очереди",
+                    thinking: "готовит ответ…",
+                    answered: "ответил",
+                    abstained: "воздержался",
+                    error: "ошибка модели",
+                  }[person.status]
+                }
+              </span>
+            ))}
+          </div>
+          {!!council.silent.length && (
+            <small>
+              Пока слушают: {council.silent.map((p) => p.name).join(", ")}. К ним можно
+              обратиться по имени.
+            </small>
+          )}
+        </div>
+      )}
       <div className="chat-log" aria-live="polite">
         {history.map((e, i) => (
           <article className={`bubble ${e.kind}`} key={i}>
@@ -149,7 +199,7 @@ export default function DialoguePanel({
       )}
       {busy && (
         <small role="status">
-          Мудрецы думают. В режиме «Всем» ответы появятся по очереди.
+          Совет отвечает. Выбранные участники выскажутся по очереди.
         </small>
       )}
       {!nearNPC && target !== "players" && (
@@ -167,6 +217,7 @@ export default function DialoguePanel({
         <button
           disabled={
             busy ||
+            (target !== "players" && !!council?.active) ||
             !message.trim() ||
             (!nearNPC && target !== "players") ||
             (!!visitor && visitor.phase !== "discussing" && target !== "players")

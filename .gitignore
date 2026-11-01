@@ -6,3 +6,6 @@ dist
 apps/backend/data/
 *.gguf
 *.bak
+apps/backend/data/*.db
+apps/backend/data/*.db-shm
+apps/backend/data/*.db-wal

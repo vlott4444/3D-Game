@@ -46,6 +46,7 @@ select:focus {
   overflow: hidden;
 }
 .hud {
+  z-index: 20;
   position: absolute;
   top: 14px;
   left: 18px;
@@ -64,6 +65,7 @@ select:focus {
 .hint,
 .controls,
 .notice {
+  z-index: 20;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -85,6 +87,7 @@ select:focus {
   color: #ffd5bc;
 }
 .dialogue {
+  z-index: 30;
   position: absolute;
   right: 18px;
   top: 85px;
@@ -182,4 +185,49 @@ select:focus {
 .visitor-card p {
   margin: 6px 0;
   font-size: 13px;
+}
+.council-roster {
+  color: #d8e5dd;
+  font-size: 12px;
+  max-height: 175px;
+  overflow: auto;
+}
+.council-roster summary {
+  cursor: pointer;
+}
+.council-roster p {
+  margin: 8px 0;
+}
+.council-status {
+  background: #1c4047;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 12px;
+  max-height: 140px;
+  overflow: auto;
+}
+.council-status small {
+  color: #b2c9cc;
+  margin-top: 6px;
+}
+.council-members {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+.council-members span {
+  border: 1px solid #567377;
+  border-radius: 5px;
+  padding: 3px 6px;
+}
+.council-members [data-status="thinking"] {
+  border-color: #d5ae65;
+  color: #ffe3a6;
+}
+.council-members [data-status="answered"] {
+  color: #c0e7ca;
+}
+.council-members [data-status="error"] {
+  color: #ffb5a6;
 }

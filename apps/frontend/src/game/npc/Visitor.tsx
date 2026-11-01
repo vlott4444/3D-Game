@@ -44,7 +44,7 @@ export default function Visitor({ room }: { room: GameRoom }) {
   });
   if (!visitor) return null;
   return (
-    <group ref={body} position={[0, 0, 16]}>
+    <group ref={body}>
       <mesh position={[0, 1.05, 0]} castShadow>
         <boxGeometry args={[0.7, 1.05, 0.4]} />
         <meshStandardMaterial color="#b8834c" />
@@ -65,7 +65,7 @@ export default function Visitor({ room }: { room: GameRoom }) {
           <meshStandardMaterial color="#b8834c" />
         </mesh>
       ))}
-      <Html center position={[0, 2.5, 0]} distanceFactor={15}>
+      <Html center position={[0, 2.5, 0]}>
         <span
           style={{
             background: "#735638",

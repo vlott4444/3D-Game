@@ -27,8 +27,8 @@ export class OllamaClient {
             keep_alive: "5m",
             options: {
               num_ctx: 4096,
-              num_predict: 240,
-              temperature: 0.5,
+              num_predict: 150,
+              temperature: 0.65,
             },
           }),
         },
