@@ -1,5 +1,6 @@
-import { chunkAt, generateChunk, CHUNK_SIZE } from "./ProceduralWorld.js";
-export type AmbientMode = "wander" | "look" | "yield" | "flee" | "eat";
+import { townBlocked } from "./Town.js";
+import { chunkAt, generateChunk, CHUNK_SIZE, groveObjects } from "./ProceduralWorld.js";
+export type AmbientMode = "wander" | "look" | "yield" | "flee" | "eat" | "guide";
 export type AmbientActor = {
   id: string;
   kind: "human" | "deer";
@@ -13,6 +14,9 @@ export type AmbientActor = {
   until: number;
   cx: number;
   cz: number;
+  guideFor?: string;
+  route?: { x: number; z: number }[];
+  guideUntil?: number;
 };
 export type AmbientPlayer = {
   id: string;
@@ -42,7 +46,7 @@ export function createAmbientChunk(cx: number, cz: number): AmbientActor[] {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  const terrain = generateChunk(cx, cz).objects;
+  const terrain = groveObjects(generateChunk(cx, cz).objects);
   const actors: AmbientActor[] = [];
   for (let i = 0; i < COUNT; i++) {
     let x = cx * 64 + 6 + random() * 52,
@@ -61,7 +65,9 @@ export function createAmbientChunk(cx: number, cz: number): AmbientActor[] {
     for (
       let attempt = 0;
       attempt < 100 &&
-      (insideHall(x, z) || terrain.some((o) => Math.hypot(o.x - x, o.z - z) < 1.7));
+      (insideHall(x, z) ||
+        townBlocked(x, z) ||
+        terrain.some((o) => Math.hypot(o.x - x, o.z - z) < 1.7));
       attempt++
     ) {
       x = cx * 64 + 6 + random() * 52;
@@ -111,7 +117,33 @@ export function stepAmbientActor(
   let tx = actor.homeX + Math.sin(now / 6500 + actor.phase) * 3,
     tz = actor.homeZ + Math.cos(now / 7000 + actor.phase) * 3;
   let speed = actor.kind === "human" ? 0.8 : 1;
-  if (nearest && nearest.speed > 6.5 && distance < (actor.kind === "deer" ? 7 : 4)) {
+  const follower = players.find((p) => p.id === actor.guideFor);
+  if (actor.guideFor && (!follower || now > (actor.guideUntil || 0))) {
+    actor.guideFor = undefined;
+    actor.route = undefined;
+  }
+  if (actor.guideFor && follower && actor.route?.length) {
+    const target = actor.route[0];
+    tx = target.x;
+    tz = target.z;
+    actor.mode = "guide";
+    speed = Math.hypot(follower.x - actor.x, follower.z - actor.z) > 12 ? 0 : 1.6;
+    if (Math.hypot(tx - actor.x, tz - actor.z) < 1) {
+      actor.route.shift();
+      if (!actor.route.length) {
+        actor.guideFor = undefined;
+        actor.homeX = actor.x;
+        actor.homeZ = actor.z;
+        actor.mode = "look";
+        actor.until = now + 3000;
+        speed = 0;
+      }
+    }
+  } else if (
+    nearest &&
+    nearest.speed > 6.5 &&
+    distance < (actor.kind === "deer" ? 7 : 4)
+  ) {
     if (actor.kind === "deer") {
       actor.mode = "flee";
       actor.until = now + 1200;
@@ -152,11 +184,18 @@ export function stepAmbientActor(
   if (d > 0.001) actor.rotY = Math.atan2(dx, dz);
   if (speed && d > 0.15) {
     const step = Math.min(d, speed * Math.min(dt, 0.2));
-    const x = clamp(actor.x + (dx / d) * step, actor.cx * 64 + 1, actor.cx * 64 + 63),
-      z = clamp(actor.z + (dz / d) * step, actor.cz * 64 + 1, actor.cz * 64 + 63);
+    const x = actor.guideFor
+        ? actor.x + (dx / d) * step
+        : clamp(actor.x + (dx / d) * step, actor.cx * 64 + 1, actor.cx * 64 + 63),
+      z = actor.guideFor
+        ? actor.z + (dz / d) * step
+        : clamp(actor.z + (dz / d) * step, actor.cz * 64 + 1, actor.cz * 64 + 63);
     if (!blocked(x, z)) {
       actor.x = x;
       actor.z = z;
+    } else {
+      if (!blocked(x, actor.z)) actor.x = x;
+      else if (!blocked(actor.x, z)) actor.z = z;
     }
   }
 }
@@ -181,7 +220,7 @@ export class AmbientWorld {
           active.add(key);
           if (!this.chunks.has(key)) {
             this.chunks.set(key, createAmbientChunk(cx, cz));
-            this.terrain.set(key, generateChunk(cx, cz).objects);
+            this.terrain.set(key, groveObjects(generateChunk(cx, cz).objects));
           }
         }
     }
@@ -203,6 +242,7 @@ export class AmbientWorld {
           dt,
           (x, z) =>
             insideHall(x, z) ||
+            townBlocked(x, z) ||
             this.terrain
               .get(key)!
               .some((o) => o.kind === "tree" && Math.hypot(x - o.x, z - o.z) < 0.7) ||
@@ -212,6 +252,43 @@ export class AmbientWorld {
               return next < o.radius && (current >= o.radius || next <= current);
             }),
         );
+  }
+  guide(playerId: string, x: number, z: number, now: number) {
+    const people = [...this.chunks.values()]
+      .flat()
+      .filter((a) => a.kind === "human" && Math.hypot(a.x - x, a.z - z) < 4)
+      .sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
+    const person = people[0];
+    if (!person) throw Error("Подойди ближе к жителю: N — попросить провести к совету");
+    if (person.guideFor && person.guideFor !== playerId)
+      throw Error("Этот житель сейчас помогает другому игроку");
+    if (person.guideFor === playerId) {
+      person.guideFor = undefined;
+      person.route = undefined;
+      return "Смотритель: Хорошо, останусь здесь. Обращайся, если понадобится дорога.";
+    }
+    if (Math.hypot(person.x, person.z) > 180)
+      return "Смотритель: Главный зал далеко. Кнопка «В зал» вернёт тебя к совету; возле городка я смогу проводить пешком.";
+    person.guideFor = playerId;
+    person.guideUntil = now + 90000;
+    person.route = [
+      {
+        x:
+          Math.abs(person.x) > 20 || person.z < 16
+            ? (Math.sign(person.x) || 1) * 26
+            : person.x,
+        z: person.z,
+      },
+      {
+        x:
+          Math.abs(person.x) > 20 || person.z < 16
+            ? (Math.sign(person.x) || 1) * 26
+            : person.x,
+        z: 18,
+      },
+      { x: 0, z: 18 },
+    ];
+    return "Смотритель: Проведу к главному залу. Иди за мной — если отстанешь, я подожду. N рядом со мной — отменить помощь.";
   }
   stimulate(playerId: string, kind: Stimulus["kind"], x: number, z: number, now: number) {
     this.signals.set(`${playerId}:${kind}`, {

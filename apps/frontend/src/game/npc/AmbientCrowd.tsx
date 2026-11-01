@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import { Color, InstancedMesh, Object3D } from "three";
 import type { GameRoom } from "../../network/GameConnection";
 type Actor = {
@@ -8,7 +9,7 @@ type Actor = {
   x: number;
   z: number;
   rotY: number;
-  mode: "wander" | "look" | "yield" | "flee" | "eat";
+  mode: "wander" | "look" | "yield" | "flee" | "eat" | "guide";
 };
 type Snapshot = { actors: Actor[]; food: { id: string; x: number; z: number }[] };
 type Part = {
@@ -221,6 +222,18 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
           </mesh>
         </group>
       ))}
+      {snapshot.actors
+        .filter((actor) => actor.mode === "guide")
+        .map((actor) => (
+          <Html
+            key={`guide:${actor.id}`}
+            center
+            position={[actor.x, 2.6, actor.z]}
+            distanceFactor={10}
+          >
+            <span className="town-label">Смотритель · иди за мной</span>
+          </Html>
+        ))}
     </>
   );
 }

@@ -1,3 +1,5 @@
+import Town, { type Building, type Path } from "./world/Town";
+import InteractiveObjects from "./world/InteractiveObjects";
 import { useEffect, useMemo, useRef, useLayoutEffect, useState } from "react";
 import { RigidBody, CuboidCollider, CylinderCollider } from "@react-three/rapier";
 import { InstancedMesh, Object3D } from "three";
@@ -11,6 +13,7 @@ type Chunk = {
   cz: number;
   objects: WorldObject[];
   edits?: WorldEdit[];
+  town?: { buildings: Building[]; paths: Path[] };
 };
 type Snapshot = { chunkSize: number; chunks: Chunk[] };
 const SIZE = 64;
@@ -28,7 +31,17 @@ function Grove({ objects }: { objects: WorldObject[] }) {
   const trunk = useRef<InstancedMesh>(null),
     leaves = useRef<InstancedMesh>(null),
     rock = useRef<InstancedMesh>(null);
-  const trees = useMemo(() => objects.filter((o) => o.kind === "tree"), [objects]);
+  const trees = useMemo(
+    () =>
+      objects
+        .filter((o) => o.kind === "tree")
+        .flatMap((o) => [
+          o,
+          { ...o, x: o.x + 2.3 * o.scale, z: o.z + 1.6 * o.scale, scale: o.scale * 0.78 },
+          { ...o, x: o.x - 1.8 * o.scale, z: o.z + 2.4 * o.scale, scale: o.scale * 0.9 },
+        ]),
+    [objects],
+  );
   const rocks = useMemo(() => objects.filter((o) => o.kind === "rock"), [objects]);
   useLayoutEffect(() => {
     const dummy = new Object3D();
@@ -110,6 +123,12 @@ export default function World({
       ))}
       <Grove key={snapshot.chunks.map((c) => c.id).join(",")} objects={objects} />
       <Hall />
+      <Town
+        room={room}
+        buildings={snapshot.chunks.flatMap((c) => c.town?.buildings || [])}
+        paths={snapshot.chunks.flatMap((c) => c.town?.paths || [])}
+      />
+      <InteractiveObjects room={room} />
       <WorldChanges edits={snapshot.chunks.flatMap((chunk) => chunk.edits || [])} />
     </>
   );

@@ -224,5 +224,60 @@ export function mergedChatTests(endpoint: string) {
         200,
       );
     });
+    it("shares object ownership and door actions over authenticated WebSocket without using the model", async () => {
+      const before = calls.length,
+        a = await join("physical_owner", 4, 18),
+        b = await join("physical_observer", 5, 18);
+      function state(room: any, test: (m: any) => boolean): Promise<any> {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            off();
+            reject(Error("object state timeout"));
+          }, 10000);
+          const off = room.onMessage("object_snapshot", (m: any) => {
+            if (test(m)) {
+              clearTimeout(timer);
+              off();
+              resolve(m);
+            }
+          });
+        });
+      }
+      const initial = [message(a, "object_snapshot"), message(b, "object_snapshot")];
+      a.send("object_request", {});
+      b.send("object_request", {});
+      await Promise.all(initial);
+      const held = state(a, (m) => m.holdingId === "town-item-0"),
+        seen = state(b, (m) =>
+          m.items.some((o: any) => o.id === "town-item-0" && o.holder),
+        );
+      a.send("object_action", { action: "pickup", id: "town-item-0" });
+      await held;
+      assert.equal((await seen).holdingId, undefined);
+      const denied = message(b, "world_feedback");
+      b.send("object_action", { action: "pickup", id: "town-item-0" });
+      assert.match((await denied).text, /занят/);
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      const placed = state(b, (m) =>
+        m.items.some((o: any) => o.id === "town-item-0" && !o.holder),
+      );
+      a.send("object_action", { action: "drop" });
+      await placed;
+      const doorOwner = await join("physical_door_owner", -40, -18);
+      const opened = state(b, (m) =>
+        m.doors.some((d: any) => d.id === "home--1-0" && d.open),
+      );
+      doorOwner.send("object_action", { action: "toggle", id: "home--1-0" });
+      await opened;
+      assert.equal(calls.length, before);
+      const crowd = message(a, "ambient_snapshot");
+      a.send("ambient_request", {});
+      const citizen = (await crowd).actors.find((actor: any) => actor.kind === "human");
+      const caller = await join("resident_guide_caller", citizen.x, citizen.z);
+      const help = message(caller, "world_feedback");
+      caller.send("citizen_action", {});
+      assert.match((await help).text, /Проведу/);
+      assert.equal(calls.length, before);
+    });
   });
 }

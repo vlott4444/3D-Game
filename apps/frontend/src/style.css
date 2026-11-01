@@ -785,3 +785,269 @@ textarea:focus {
 .admin-panel [role="alert"] {
   color: #ffc0b4;
 }
+
+/* Compact game controls: one card, stable two-column layout. */
+.game-hud {
+  position: absolute;
+  z-index: 20;
+  right: 16px;
+  top: 16px;
+  width: 306px;
+  padding: 17px;
+  background: #15343bee;
+  border: 1px solid #9bbab333;
+  border-radius: 17px;
+  box-shadow: 0 12px 40px #10262d33;
+  backdrop-filter: blur(12px);
+}
+.hud-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hud-heading small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: #b6d0c1;
+}
+.hud-heading h1 {
+  font-size: 19px;
+  line-height: 1.3;
+  margin: 5px 0 10px;
+  color: #f3efde;
+}
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ac8a75;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 5px #ffffff08;
+}
+.connection-dot.online {
+  background: #8cc6a0;
+}
+.hud-status {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.hud-status span {
+  font-size: 10px;
+  padding: 4px 7px;
+  background: #ffffff0b;
+  color: #cedcd6;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.hud-saved {
+  font-size: 10px;
+  color: #9fb9b4;
+  margin: 7px 0 13px;
+}
+.hud-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.hud-grid button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  font-size: 12px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  text-align: left;
+}
+.hud-grid kbd {
+  font: 10px Arial;
+  opacity: 0.72;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.hud-grid .hud-secondary {
+  background: #294c53;
+  color: #e0e8dd;
+  border: 1px solid #75928c33;
+}
+.hud-grid .hud-exit {
+  background: #415052;
+  color: #e4d8c8;
+}
+.hud-tip {
+  display: block;
+  font-size: 10px;
+  color: #9ebcb4;
+  margin-top: 11px;
+}
+.world-feedback {
+  top: auto;
+  bottom: 130px;
+  max-width: min(700px, 90vw);
+}
+.object-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 105px;
+  transform: translateX(-50%);
+  padding: 9px 15px;
+  border-radius: 8px;
+  background: #193a40ee;
+  color: #fff0ce;
+  font: 13px Arial;
+  white-space: nowrap;
+  box-shadow: 0 3px 15px #0002;
+}
+.town-label {
+  display: block;
+  background: #314b43de;
+  padding: 5px 9px;
+  border-radius: 4px;
+  color: #fff1d3;
+  white-space: nowrap;
+  font: 12px Georgia;
+  pointer-events: none;
+}
+.admin-window {
+  position: absolute;
+  z-index: 24;
+  right: 16px;
+  bottom: 18px;
+  width: 350px;
+  max-width: calc(100vw - 32px);
+  color: #e9ede2;
+  background: #18363ef5;
+  border: 1px solid #b59a6155;
+  border-radius: 13px;
+  box-shadow: 0 12px 40px #0003;
+  overflow: hidden;
+}
+.admin-window > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 13px;
+  background: #25474d;
+}
+.admin-window h2 {
+  font-size: 13px;
+  margin: 0;
+}
+.admin-window-actions {
+  display: flex;
+  gap: 4px;
+}
+.admin-window-actions button {
+  font-size: 10px;
+  padding: 5px 7px;
+}
+.admin-window-body {
+  max-height: min(430px, calc(100dvh - 370px));
+  min-height: 130px;
+  overflow-y: auto;
+  padding: 0 15px 15px;
+  overscroll-behavior: contain;
+}
+.admin-window h3 {
+  font-size: 13px;
+  margin: 15px 0 8px;
+}
+.admin-window .muted {
+  font-size: 10px;
+  line-height: 1.5;
+}
+.admin-window label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 11px;
+}
+.admin-window textarea,
+.admin-window select {
+  width: 100%;
+  font-size: 12px;
+  padding: 8px;
+}
+.admin-window textarea {
+  resize: vertical;
+  min-height: 95px;
+}
+.admin-window table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.admin-window td,
+.admin-window th {
+  padding: 5px 3px;
+  border-bottom: 1px solid #496664;
+}
+.admin-window footer {
+  display: flex;
+  gap: 6px;
+}
+.admin-window footer button {
+  font-size: 10px;
+  padding: 8px;
+}
+.admin-window details {
+  font-size: 11px;
+}
+.admin-window [role="alert"] {
+  color: #ffb5a6;
+  font-size: 11px;
+}
+.admin-window [role="status"] {
+  font-size: 11px;
+  color: #badaad;
+}
+@media (max-width: 700px) {
+  .game-hud {
+    right: 8px;
+    top: 8px;
+    width: 236px;
+    padding: 12px;
+  }
+  .hud-heading h1 {
+    font-size: 16px;
+  }
+  .hud-grid button {
+    font-size: 11px;
+    padding: 8px;
+  }
+  .hud-status span {
+    font-size: 9px;
+    padding: 3px 5px;
+  }
+  .hud-tip {
+    display: none;
+  }
+  .player-chat {
+    top: 245px;
+    width: 220px;
+    max-height: 180px;
+  }
+  .admin-window {
+    right: 8px;
+    bottom: 8px;
+    max-width: calc(100vw - 16px);
+  }
+  .admin-window-body {
+    max-height: 40dvh;
+  }
+  .controls {
+    font-size: 10px;
+  }
+  .object-hint {
+    font-size: 11px;
+    max-width: 95vw;
+    white-space: normal;
+    text-align: center;
+  }
+}

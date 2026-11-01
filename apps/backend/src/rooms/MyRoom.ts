@@ -1,3 +1,4 @@
+import { interactiveWorld, type PhysicalPlayer } from "../world/InteractiveWorld.js";
 import { isAdministrator } from "../admin.service.js";
 import { metricsStore } from "../AdminMetrics.js";
 import {
@@ -42,6 +43,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private councilTurn: CouncilTurn | null = null;
   private ambient = new AmbientWorld();
   private ambientSubscribers = new Set<string>();
+  private objectSubscribers = new Set<string>();
   private motion = new Map<
     string,
     { speed: number; dx: number; dz: number; at: number }
@@ -69,6 +71,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       z: edit.z,
       radius: edit.kind === "garden" ? 3 : edit.kind === "benches" ? 4.5 : 1.2,
     }));
+    obstacles.push(
+      ...interactiveWorld()
+        .items.filter((item) => !item.holder && item.y < 1)
+        .map((item) => ({ x: item.x, z: item.z, radius: 0.8 })),
+    );
     this.ambient.update(
       players,
       now,
@@ -104,6 +111,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.clock.setInterval(() => {
       const now = Date.now();
       this.updateAmbient(now);
+      const objectWorld = interactiveWorld();
+      objectWorld.setPlayers(
+        this.roomId,
+        this.clients
+          .map((client) => this.physicalPlayer(client))
+          .filter((p): p is PhysicalPlayer => !!p),
+      );
+      objectWorld.update(now);
+      if (this.ambientStep % 2 === 0)
+        for (const client of this.clients) {
+          const player = this.physicalPlayer(client);
+          if (player && this.objectSubscribers.has(client.sessionId))
+            client.send("object_snapshot", objectWorld.snapshot(player));
+        }
       if (++this.ambientStep % 2 === 0)
         for (const client of this.clients)
           if (this.ambientSubscribers.has(client.sessionId)) {
@@ -115,6 +136,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.visitors.advance(Date.now()))
         this.broadcast("visitor_state", this.visitors.snapshot());
     }, 250);
+  }
+  private physicalPlayer(client: Client): PhysicalPlayer | undefined {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const m = this.motion.get(client.sessionId),
+      recent = m && Date.now() - m.at < 600;
+    return {
+      id: client.auth.playerId,
+      x: p.x,
+      z: p.y,
+      height: p.height,
+      rotY: p.rotY,
+      speed: recent ? m.speed : 0,
+      dx: recent ? m.dx : 0,
+      dz: recent ? m.dz : 0,
+    };
   }
   private streamWorld(client: Client, force = false) {
     const player = this.state.players.get(client.sessionId);
@@ -294,6 +331,40 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     });
   }
   messages = {
+    object_request: (client: Client) => {
+      const p = this.physicalPlayer(client);
+      if (!p) return;
+      this.objectSubscribers.add(client.sessionId);
+      client.send("object_snapshot", interactiveWorld().snapshot(p));
+    },
+    object_action: (client: Client, raw: unknown) => {
+      const p = this.physicalPlayer(client);
+      if (!p || !raw || typeof raw !== "object") return;
+      const m = raw as { action?: unknown; id?: unknown };
+      try {
+        const text = interactiveWorld().action(p, m.action, m.id);
+        client.send("world_feedback", { text });
+        for (const c of this.clients) {
+          const player = this.physicalPlayer(c);
+          if (player && this.objectSubscribers.has(c.sessionId))
+            c.send("object_snapshot", interactiveWorld().snapshot(player));
+        }
+      } catch (e) {
+        client.send("world_feedback", { text: (e as Error).message });
+      }
+    },
+    citizen_action: (client: Client) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p) return;
+      try {
+        this.updateAmbient(Date.now());
+        client.send("world_feedback", {
+          text: this.ambient.guide(client.sessionId, p.x, p.y, Date.now()),
+        });
+      } catch (e) {
+        client.send("world_feedback", { text: (e as Error).message });
+      }
+    },
     admin_request: (client: Client) => {
       if (this.state.players.has(client.sessionId))
         client.send("is_admin", isAdministrator(client.auth.playerId));
@@ -733,6 +804,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
   };
   onDispose() {
+    interactiveWorld().removeRoom(this.roomId);
     this.offGlobal?.();
     this.offWorld?.();
   }
@@ -761,6 +833,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastPlayerChat.delete(client.sessionId);
     this.streamedChunks.delete(client.sessionId);
     this.ambientSubscribers.delete(client.sessionId);
+    this.objectSubscribers.delete(client.sessionId);
+    interactiveWorld().leave(client.auth.playerId);
     this.motion.delete(client.sessionId);
     this.lastGesture.delete(`${client.sessionId}:wave`);
     this.lastGesture.delete(`${client.sessionId}:feed`);

@@ -1,3 +1,4 @@
+import GameHUD from "./ui/GameHUD";
 import { AdminPanel } from "./ui/AdminPanel";
 import { useEffect, useState } from "react";
 import GameScene from "./game/GameScene";
@@ -93,7 +94,6 @@ export default function App() {
         e.code === "KeyC" &&
         !e.repeat &&
         room &&
-        !showAdmin &&
         !(
           e.target instanceof HTMLElement &&
           (e.target.isContentEditable ||
@@ -119,7 +119,6 @@ export default function App() {
       if (
         !room ||
         open ||
-        showAdmin ||
         event.repeat ||
         (event.target instanceof HTMLElement &&
           (event.target.isContentEditable ||
@@ -212,7 +211,7 @@ export default function App() {
         <GameScene
           room={room}
           initialPose={spawn}
-          dialogueOpen={open || showAdmin}
+          dialogueOpen={open}
           interaction={interaction}
           onNearbyChange={setInteraction}
           onInteract={openChat}
@@ -222,52 +221,30 @@ export default function App() {
         <div className="loading">Подключаемся к залу…</div>
       )}
       <PlayerChat room={room} />
-      <header className="hud">
-        {isAdmin && (
-          <button
-            onClick={() => {
-              setOpen(false);
-              setShowAdmin(true);
-              if (document.pointerLockElement) document.exitPointerLock();
-            }}
-          >
-            Админка
-          </button>
-        )}
-        <b>Совет мудрецов</b>
-        <span>
-          {room ? "В игре" : "Нет соединения"} · {saved} · Чанков: {chunkCount}/9 · NPC:{" "}
-          {ambientCount}
-        </span>
-        <button onClick={() => openChat("all")} disabled={!room}>
-          Совет (C)
-        </button>
-        <button
-          disabled={!room || open}
-          onClick={() => room?.send("ambient_action", { action: "wave" })}
-        >
-          Позвать (G)
-        </button>
-        <button
-          disabled={!room || open}
-          onClick={() => room?.send("ambient_action", { action: "feed" })}
-        >
-          Угощение (F)
-        </button>
-        <button disabled={!room} onClick={() => room?.send("return_to_hall", {})}>
-          В зал
-        </button>
-        <button
-          onClick={() => {
-            localStorage.removeItem("island-token");
-            setToken("");
-            setRoom(null);
-            setSpawn(null);
-          }}
-        >
-          Выйти
-        </button>
-      </header>
+      <GameHUD
+        online={!!room}
+        saved={saved}
+        chunks={chunkCount}
+        npcs={ambientCount}
+        isAdmin={isAdmin}
+        dialogue={open}
+        onCouncil={() => openChat("all")}
+        onAdmin={() => {
+          setOpen(false);
+          setShowAdmin(true);
+          if (document.pointerLockElement) document.exitPointerLock();
+        }}
+        onWave={() => room?.send("ambient_action", { action: "wave" })}
+        onCitizen={() => room?.send("citizen_action", {})}
+        onFeed={() => room?.send("ambient_action", { action: "feed" })}
+        onHall={() => room?.send("return_to_hall", {})}
+        onLogout={() => {
+          localStorage.removeItem("island-token");
+          setToken("");
+          setRoom(null);
+          setSpawn(null);
+        }}
+      />
       {feedback && (
         <div className="world-feedback" role="status">
           {feedback}
@@ -280,8 +257,8 @@ export default function App() {
       )}
       {interaction && !open && <div className="hint">E — {interaction.label}</div>}
       <footer className="controls">
-        WASD — движение · Shift — бег · Пробел — прыжок · C — совет · Esc — освободить
-        мышь
+        WASD — движение · Shift — бег · E — мудрецы · R — предмет / дверь
+        <br />Q — положить · T — бросить · N — житель · Esc — мышь
       </footer>
       {showAdmin && isAdmin && (
         <AdminPanel token={token} onClose={() => setShowAdmin(false)} />

@@ -1,14 +1,28 @@
 import type { WorldEdit } from "./WorldActions.js";
+import { townChunk } from "./Town.js";
 export const CHUNK_SIZE = 64;
 export const CHUNK_RADIUS = 1;
 export const WORLD_SEED = 71239;
 export type WorldObject = { kind: "tree" | "rock"; x: number; z: number; scale: number };
+// A streamed tree asset is a small three-tree grove; geometry remains instanced.
+export function groveObjects(objects: WorldObject[]): WorldObject[] {
+  return objects.flatMap((o) =>
+    o.kind === "tree"
+      ? [
+          o,
+          { ...o, x: o.x + 2.3 * o.scale, z: o.z + 1.6 * o.scale, scale: o.scale * 0.78 },
+          { ...o, x: o.x - 1.8 * o.scale, z: o.z + 2.4 * o.scale, scale: o.scale * 0.9 },
+        ]
+      : [o],
+  );
+}
 export type WorldChunk = {
   id: string;
   cx: number;
   cz: number;
   objects: WorldObject[];
   edits?: WorldEdit[];
+  town?: ReturnType<typeof townChunk>;
 };
 export function chunkAt(x: number, z: number) {
   return { cx: Math.floor(x / CHUNK_SIZE), cz: Math.floor(z / CHUNK_SIZE) };
@@ -27,10 +41,10 @@ export function generateChunk(cx: number, cz: number): WorldChunk {
     // Keep the hall and its approaches clear, regardless of which chunks contain them.
     if (Math.abs(x) < 19 && Math.abs(z) < 20) continue;
     // Keep a usable courtyard for the crowd and the four construction sites.
-    if (Math.abs(x) < 28 && z > 12 && z < 44) continue;
+    if (Math.abs(x) < 58 && z > -42 && z < 75) continue;
     objects.push({ kind: i < 7 ? "tree" : "rock", x, z, scale });
   }
-  return { id: `${cx}:${cz}`, cx, cz, objects };
+  return { id: `${cx}:${cz}`, cx, cz, objects, town: townChunk(cx, cz) };
 }
 export function worldSnapshot(
   x: number,

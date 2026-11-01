@@ -70,4 +70,5 @@ CREATE TABLE IF NOT EXISTS global_messages (
 CREATE INDEX IF NOT EXISTS global_messages_channel_id ON global_messages(channel,id);
 
 CREATE TABLE IF NOT EXISTS server_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS interactive_objects(id TEXT PRIMARY KEY,state TEXT NOT NULL,updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_overrides(npc_id TEXT PRIMARY KEY, prompt TEXT NOT NULL, updated_at INTEGER NOT NULL);

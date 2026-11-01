@@ -1,3 +1,4 @@
+import ObjectInteraction from "./world/ObjectInteraction";
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
@@ -348,6 +349,7 @@ export default function PlayerController({
       {/* Камера */}
       <FollowCamera target={bodyRef} yawRef={yawRef} />
 
+      <ObjectInteraction room={room} playerRef={bodyRef} enabled={!dialogueOpen} />
       {/* Взаимодействие с NPC */}
       <NPCInteraction
         playerRef={bodyRef}
