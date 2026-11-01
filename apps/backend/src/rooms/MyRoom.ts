@@ -9,10 +9,13 @@ import { VisitorManager } from "../agents/VisitorManager.js";
 import { CouncilDirector, type CouncilTurn } from "../agents/CouncilDirector.js";
 import { canInteractAt } from "../world/InteractionZones.js";
 import { saveChatEntry, chatHistory, type ChatEntry } from "../database/chat.repo.js";
+
 const online = new Set<string>();
+
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 8;
   state = new MyRoomState();
+
   private busy = new Set<string>();
   private lastPose = new Map<string, number>();
   private discussion: string[] = [];
@@ -20,12 +23,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private visitors = new VisitorManager();
   private council = new CouncilDirector();
   private councilTurn: CouncilTurn | null = null;
+
   onCreate() {
+    // 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Запрещаем серверу удалять комнату, когда в ней никого нет.
+    // Это гарантирует, что второй игрок зайдет в ту же самую комнату, а не создаст новую.
+    this.autoDispose = false;
+
     this.clock.setInterval(() => {
       if (this.visitors.advance(Date.now()))
         this.broadcast("visitor_state", this.visitors.snapshot());
     }, 250);
   }
+
   private streamWorld(client: Client, force = false) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -36,13 +45,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("world_snapshot", worldSnapshot(player.x, player.y));
     }
   }
+
   private canTalk(client: Client, target: string) {
     const player = this.state.players.get(client.sessionId);
     return !!player && canInteractAt(player.x, player.y, target);
   }
+
   private historyCase(target: string) {
     return target === "players" ? "players" : this.visitors.current?.id || "open-council";
   }
+
   private publish(entry: ChatEntry, ownerId: string) {
     const saved = saveChatEntry(entry, [
       ownerId,
@@ -51,18 +63,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("dialogue", saved);
     return saved;
   }
+
   static async onAuth(token: string) {
     const auth = verifyToken(token);
     if (!findById(auth.playerId)) throw Error("Игрок не найден");
     return auth;
   }
+
   onJoin(client: Client) {
     const id = client.auth.playerId;
+    // Эта проверка не даст зайти двум игрокам с ОДНИМ аккаунтом.
+    // Для теста создавайте разные аккаунты (player1, player2).
     if (online.has(id)) {
       client.leave(4001, "Этот аккаунт уже в игре");
       return;
     }
     online.add(id);
+
     const row = findById(id)!;
     const saved =
       row.last_seen != null &&
@@ -70,6 +87,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       Number.isFinite(row.pos_y) &&
       Math.abs(row.pos_x) < 10000000 &&
       Math.abs(row.pos_y) < 10000000;
+
     const p = new Player({
       x: saved ? row.pos_x : 0,
       y: saved ? row.pos_y : 0,
@@ -79,11 +97,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       vx: 0,
       vy: 0,
     });
+
     this.state.players.set(client.sessionId, p);
     this.lastPose.set(client.sessionId, Date.now() - 100);
   }
+
   messages = {
     council_request: (client: Client) => client.send("council_turn", this.councilTurn),
+
     return_to_hall: (client: Client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
@@ -102,9 +123,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.streamWorld(client, true);
       client.send("spawn", { x: 0, z: 8, height: 1.18, rotY: 0 });
     },
+
     world_request: (client: Client) => this.streamWorld(client, true),
+
     visitor_request: (client: Client) =>
       client.send("visitor_state", this.visitors.snapshot()),
+
     visitor_action: (client: Client, message: { action?: string }) => {
       try {
         if (!this.canTalk(client, "all")) throw Error("Подойди к столу совета");
@@ -121,6 +145,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("visitor_error", { text: (e as Error).message });
       }
     },
+
     dialogue_history: (client: Client, message: { target?: string }) => {
       const target = message?.target || "all";
       if (
@@ -136,11 +161,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         history: chatHistory(client.auth.playerId, target, caseId),
       });
     },
+
     case_history: (client: Client) =>
       client.send("case_history", {
         history: chatHistory(client.auth.playerId, "all", this.historyCase("all")),
         evidence: {},
       }),
+
     pose: (client: Client, m: unknown) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || !m || typeof m !== "object") return;
@@ -165,7 +192,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("spawn", { x: p.x, z: p.y, height: p.height, rotY: p.rotY });
         return;
       }
-      // Commit before acknowledgement: only an acknowledged pose is guaranteed durable.
       saveState(client.auth.playerId, {
         roomId: this.roomId,
         posX: v.x,
@@ -181,6 +207,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("pose_saved", { seq: v.seq });
       this.streamWorld(client);
     },
+
     chat: async (client: Client, m: unknown) => {
       if (!m || typeof m !== "object") return;
       const { text, target, requestId } = m as Record<string, unknown>;
@@ -280,8 +307,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         );
         this.discussion.push(`${p.username}: ${text}`);
         this.discussion = this.discussion.slice(-12);
-        // Keep the older conversation stable; a separate bounded quote identifies
-        // the current proposal that the next participant should evaluate.
         const roundContext = this.discussion.join("\n");
         for (const npc of participants) {
           const reactionTo = roundReplies.at(-1);
@@ -357,6 +382,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     },
   };
+
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     if (p) {
