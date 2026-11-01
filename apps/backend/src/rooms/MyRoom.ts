@@ -1,14 +1,14 @@
-import { readFileSync } from "node:fs";
 import { Room, Client } from "colyseus";
 import { MyRoomState, Player } from "./schema/MyRoomState.js";
 import { findById, saveState } from "../database/players.repo.js";
-import { getDb } from "../database/db.js";
 import { verifyToken } from "../auth/auth.service.js";
 import { agentService } from "../agents/AgentService.js";
 import { cast } from "../agents/cast.js";
 import { chunkAt, worldSnapshot } from "../world/ProceduralWorld.js";
 import { VisitorManager } from "../agents/VisitorManager.js";
 import { CouncilDirector, type CouncilTurn } from "../agents/CouncilDirector.js";
+import { canInteractAt } from "../world/InteractionZones.js";
+import { saveChatEntry, chatHistory, type ChatEntry } from "../database/chat.repo.js";
 const online = new Set<string>();
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 8;
@@ -36,9 +36,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("world_snapshot", worldSnapshot(player.x, player.y));
     }
   }
-  private inHall(client: Client) {
-    const p = this.state.players.get(client.sessionId);
-    return !!p && Math.abs(p.x) < 11 && p.y > -12 && p.y < 11;
+  private canTalk(client: Client, target: string) {
+    const player = this.state.players.get(client.sessionId);
+    return !!player && canInteractAt(player.x, player.y, target);
+  }
+  private historyCase(target: string) {
+    return target === "players" ? "players" : this.visitors.current?.id || "open-council";
+  }
+  private publish(entry: ChatEntry, ownerId: string) {
+    const saved = saveChatEntry(entry, [
+      ownerId,
+      ...this.clients.map((client) => client.auth?.playerId).filter(Boolean),
+    ]);
+    this.broadcast("dialogue", saved);
+    return saved;
   }
   static async onAuth(token: string) {
     const auth = verifyToken(token);
@@ -96,7 +107,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("visitor_state", this.visitors.snapshot()),
     visitor_action: (client: Client, message: { action?: string }) => {
       try {
-        if (!this.inHall(client)) throw Error("Подойди в зал совета");
+        if (!this.canTalk(client, "all")) throw Error("Подойди к столу совета");
         if (this.busy.size) throw Error("Дождись окончания обсуждения");
         if (message?.action === "call") this.visitors.call(Date.now());
         else if (message?.action === "finish") this.visitors.finish(Date.now());
@@ -110,52 +121,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("visitor_error", { text: (e as Error).message });
       }
     },
-    case_history: (client: Client) => {
-      const rows = getDb()
-        .prepare(
-          "SELECT npc_id,role,content FROM dialogue WHERE player_id=? ORDER BY id DESC LIMIT 40",
-        )
-        .all(client.auth.playerId) as { npc_id: string; role: string; content: string }[];
-      const history = rows.reverse().map((r) => ({
-        speaker:
-          r.role === "user"
-            ? client.auth.username
-            : cast.find((n) => n.id === r.npc_id)?.name ||
-              (
-                {
-                  curie: "Мария Кюри",
-                  tesla: "Никола Тесла",
-                  herodotus: "Геродот",
-                  holmes: "Шерлок Холмс",
-                } as Record<string, string>
-              )[r.npc_id] ||
-              r.npc_id,
-        text: r.content,
-        kind: r.role === "user" ? "player" : "npc",
-      }));
-      const evidence: Record<string, string> = {};
-      for (const row of getDb()
-        .prepare("SELECT clue_id FROM evidence WHERE player_id=?")
-        .all(client.auth.playerId) as { clue_id: string }[]) {
-        const npc = cast.find(
-          (n) =>
-            JSON.parse(
-              readFileSync(
-                new URL(`../agents/profiles/${n.id}.json`, import.meta.url),
-                "utf8",
-              ),
-            ).clue.id === row.clue_id,
-        );
-        if (npc)
-          evidence[row.clue_id] = JSON.parse(
-            readFileSync(
-              new URL(`../agents/profiles/${npc.id}.json`, import.meta.url),
-              "utf8",
-            ),
-          ).clue.text;
-      }
-      client.send("case_history", { history, evidence });
+    dialogue_history: (client: Client, message: { target?: string }) => {
+      const target = message?.target || "all";
+      if (
+        target !== "all" &&
+        target !== "players" &&
+        !cast.some((person) => person.id === target)
+      )
+        return;
+      const caseId = this.historyCase(target);
+      client.send("dialogue_history", {
+        target,
+        caseId,
+        history: chatHistory(client.auth.playerId, target, caseId),
+      });
     },
+    case_history: (client: Client) =>
+      client.send("case_history", {
+        history: chatHistory(client.auth.playerId, "all", this.historyCase("all")),
+        evidence: {},
+      }),
     pose: (client: Client, m: unknown) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || !m || typeof m !== "object") return;
@@ -231,8 +216,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
-      if (target !== "players" && !this.inHall(client)) {
-        client.send("dialogue_done", { requestId, error: "Войди в зал совета" });
+      if (!this.canTalk(client, target as string)) {
+        client.send("dialogue_done", {
+          requestId,
+          error:
+            target === "all"
+              ? "Для общего обсуждения подойди к столу совета"
+              : "Для разговора подойди к выбранному мудрецу",
+        });
         return;
       }
       const visit = this.visitors.current;
@@ -273,19 +264,27 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.councilTurn = turn;
         this.broadcast("council_turn", turn);
       }
-      this.broadcast("dialogue", {
-        speaker: p.username,
-        text,
-        requestId,
-        kind: "player",
-      });
-      this.discussion.push(`${p.username}: ${text}`);
-      this.discussion = this.discussion.slice(-12);
-      // All selected people see the same previous conversation, not a growing chain
-      // of this turn's replies, which small models tend to imitate.
-      const roundContext = this.discussion.join("\n");
+      const caseId = this.historyCase(target as string);
+      let failure: string | undefined;
       try {
+        this.publish(
+          {
+            target: target as string,
+            caseId,
+            speaker: p.username,
+            text,
+            requestId,
+            kind: "player",
+          },
+          client.auth.playerId,
+        );
+        this.discussion.push(`${p.username}: ${text}`);
+        this.discussion = this.discussion.slice(-12);
+        // Keep the older conversation stable; a separate bounded quote identifies
+        // the current proposal that the next participant should evaluate.
+        const roundContext = this.discussion.join("\n");
         for (const npc of participants) {
+          const reactionTo = roundReplies.at(-1);
           const member = turn!.members.find((person) => person.id === npc.id)!;
           member.status = "thinking";
           turn!.currentNpcId = npc.id;
@@ -309,36 +308,42 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             member.status = "answered";
             roundReplies.push({ name: npc.name, text: answer.text });
             spoken.push(npc.id);
-            this.broadcast("dialogue", {
-              speaker: npc.name,
-              npcId: npc.id,
-              text: answer.text,
-              kind: "npc",
-              requestId,
-            });
+            this.publish(
+              {
+                target: target as string,
+                caseId,
+                reactionTo,
+                speaker: npc.name,
+                npcId: npc.id,
+                text: answer.text,
+                kind: "npc",
+                requestId,
+              },
+              client.auth.playerId,
+            );
             this.discussion.push(`${npc.name}: ${answer.text}`);
             this.discussion = this.discussion.slice(-12);
             if (visit) this.visitors.recordReply(visit.id);
-            if (answer.clue) {
-              // Group evidence is copied into the persistent case file of each present player.
-              for (const c of this.clients)
-                if (c.auth?.playerId)
-                  getDb()
-                    .prepare("INSERT OR IGNORE INTO evidence VALUES (?,?)")
-                    .run(c.auth.playerId, answer.clue.id);
-              this.broadcast("evidence", answer.clue);
-            }
           } catch (e) {
             member.status = "error";
             console.error("NPC failure", npc.id, e);
-            this.broadcast("dialogue", {
-              speaker: npc.name,
-              text: "Ошибка локальной модели. Проверь Ollama и имя модели на сервере.",
-              kind: "error",
-              requestId,
-            });
+            this.publish(
+              {
+                target: target as string,
+                caseId,
+                speaker: npc.name,
+                text: "Ошибка локальной модели. Проверь Ollama и имя модели на сервере.",
+                kind: "error",
+                requestId,
+              },
+              client.auth.playerId,
+            );
           }
         }
+      } catch (error) {
+        console.error("Conversation persistence failure", error);
+        failure =
+          "Не удалось сохранить сообщение. Повтори попытку после проверки сервера.";
       } finally {
         if (turn) {
           turn.active = false;
@@ -347,7 +352,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.broadcast("council_turn", turn);
         }
         this.busy.delete(client.sessionId);
-        client.send("dialogue_done", { requestId });
+        client.send("dialogue_done", { requestId, error: failure });
         this.broadcast("visitor_state", this.visitors.snapshot());
       }
     },

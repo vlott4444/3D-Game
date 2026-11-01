@@ -1,6 +1,8 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { RapierRigidBody } from "@react-three/rapier";
+import { cast } from "./cast";
+import { interactionAt, type InteractionTarget } from "./interactionTarget";
 export default function NPCInteraction({
   playerRef,
   enabled,
@@ -9,17 +11,17 @@ export default function NPCInteraction({
 }: {
   playerRef: RefObject<RapierRigidBody | null>;
   enabled: boolean;
-  onNearbyChange: (b: boolean) => void;
-  onInteract: () => void;
+  onNearbyChange: (target: InteractionTarget | null) => void;
+  onInteract: (target: string) => void;
 }): null {
-  const near = useRef(false);
+  const near = useRef<InteractionTarget | null>(null);
   const callbacks = useRef({ onNearbyChange, onInteract, enabled });
   callbacks.current = { onNearbyChange, onInteract, enabled };
   useFrame(() => {
     const p = playerRef.current?.translation();
     if (!p) return;
-    const next = Math.abs(p.x) < 11 && p.z > -12 && p.z < 11;
-    if (next !== near.current) {
+    const next = interactionAt(p.x, p.z, cast);
+    if (next?.target !== near.current?.target) {
       near.current = next;
       callbacks.current.onNearbyChange(next);
     }
@@ -28,7 +30,7 @@ export default function NPCInteraction({
     const key = (e: KeyboardEvent) => {
       if (e.code === "KeyE" && !e.repeat && near.current && callbacks.current.enabled) {
         e.preventDefault();
-        callbacks.current.onInteract();
+        callbacks.current.onInteract(near.current.target);
       }
     };
     window.addEventListener("keydown", key);

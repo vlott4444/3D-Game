@@ -100,7 +100,7 @@ export default function Hall() {
             font: "bold 26px Georgia",
           }}
         >
-          ЗАЛ ШЕСТИ МУДРЕЦОВ
+          СОВЕТ МУДРЕЦОВ
         </div>
       </Html>
       <pointLight position={[0, 4, -2.5]} intensity={45} color="#ffe2a9" distance={24} />

@@ -24,6 +24,24 @@ async function ready(room: any) {
   if (room.state?.players?.get(room.sessionId)) return;
   await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()));
 }
+async function walkTo(room: any, x: number, z: number) {
+  const player = room.state.players.get(room.sessionId);
+  const fromX = player.x,
+    fromZ = player.y;
+  const steps = Math.max(1, Math.ceil(Math.hypot(x - fromX, z - fromZ) / 1.6));
+  for (let i = 1; i <= steps; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 110));
+    const saved = message(room, "pose_saved");
+    room.send("pose", {
+      x: fromX + ((x - fromX) * i) / steps,
+      z: fromZ + ((z - fromZ) * i) / steps,
+      height: 1.18,
+      rotY: 0,
+      seq: 1000 + i,
+    });
+    await saved;
+  }
+}
 describe("Authenticated WebSocket flow", function () {
   this.timeout(30000);
   let server: ColyseusTestServer;
@@ -128,8 +146,23 @@ describe("Authenticated WebSocket flow", function () {
       modelRequests[beforeCalls + 1].messages.some((m: any) =>
         m.content.includes(firstReply),
       ),
-      false,
+      true,
     );
+    assert.equal(
+      received.filter((m) => m.kind === "npc")[1].reactionTo.name,
+      received.find((m) => m.kind === "npc").speaker,
+    );
+    const loaded = message(a, "dialogue_history");
+    a.send("dialogue_history", { target: "all" });
+    const history = (await loaded).history;
+    assert.equal(
+      history.filter(
+        (entry: any) =>
+          entry.text === "Сравните варианты справедливого распределения воды",
+      ).length,
+      1,
+    );
+    assert.ok(history.every((entry: any) => entry.target === "all"));
     const previousIds = received.filter((m) => m.kind === "npc").map((m) => m.npcId);
     const others: string[] = [];
     const offOther = a.onMessage("dialogue", (m: any) => {
@@ -160,6 +193,7 @@ describe("Authenticated WebSocket flow", function () {
     assert.deepEqual(named, ["lovelace", "socrates"]);
   });
   it("does not interleave two players' council turns while a model call is pending", async () => {
+    await walkTo(a, -6, -2);
     const previousFetch = globalThis.fetch;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -192,6 +226,26 @@ describe("Authenticated WebSocket flow", function () {
       globalThis.fetch = previousFetch;
     }
   });
+  it("requires approaching the intended NPC or the table, while player chat remains available", async () => {
+    const denied = message(b, "dialogue_done");
+    b.send("chat", { text: "Привет", target: "einstein", requestId: "too-far" });
+    assert.match((await denied).error, /подойди/);
+    await walkTo(b, 0, 8);
+    const deniedTable = message(b, "dialogue_done");
+    b.send("chat", {
+      text: "Вопрос совету",
+      target: "all",
+      requestId: "away-from-table",
+    });
+    assert.match((await deniedTable).error, /столу/);
+    const accepted = message(b, "dialogue_done");
+    b.send("chat", {
+      text: "Привет игрокам",
+      target: "players",
+      requestId: "player-chat",
+    });
+    assert.equal((await accepted).error, undefined);
+  });
   it("streams a bounded world after restoring a position outside the old map", async () => {
     const player = findByUsername("player_two")!;
     await b.leave();
@@ -220,6 +274,7 @@ describe("Authenticated WebSocket flow", function () {
     assert.equal(findByUsername("player_two")!.pos_y, 8);
   });
   it("shares one visitor, discusses the current problem, then removes the visitor", async () => {
+    await walkTo(a, 0, 0);
     const arrive = message(a, "visitor_state");
     a.send("visitor_action", { action: "call" });
     const visitor = await arrive;
@@ -230,7 +285,7 @@ describe("Authenticated WebSocket flow", function () {
     const done = message(a, "dialogue_done");
     a.send("chat", {
       text: "Какой первый шаг предложишь для решения проблемы посетителя?",
-      target: "einstein",
+      target: "all",
       requestId: "visitor-discussion",
     });
     await done;
