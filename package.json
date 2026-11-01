@@ -25,5 +25,9 @@
   },
   "overrides": {
     "uWebSockets.js": "https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3"
+  },
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "express": "^5.3.0"
   }
 }

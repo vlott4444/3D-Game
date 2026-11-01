@@ -5,7 +5,11 @@ import { authenticate, connectToGame, type GameRoom } from "./network/GameConnec
 import "./style.css";
 import type { InteractionTarget } from "./game/npc/interactionTarget";
 import { useCouncilTurn } from "./network/CouncilTurn";
+import { useGameMetrics } from "./hooks/useGameMetrics";
+import { AdminPanel } from "./ui/AdminPanel";
+
 type Pose = { x: number; z: number; height: number; rotY: number };
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("island-token") || "");
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -19,7 +23,13 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState("Ожидаем сохранения");
   const [chunkCount, setChunkCount] = useState(0);
+
+  // 🔥 NEW: Состояние для открытия/закрытия админки
+  const [showAdmin, setShowAdmin] = useState(false);
+
   const council = useCouncilTurn(room);
+  useGameMetrics(room);
+
   useEffect(() => {
     if (!token) return;
     let disposed = false;
@@ -67,6 +77,7 @@ export default function App() {
       if (active) void active.leave();
     };
   }, [token]);
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.code === "Escape") setOpen(false);
@@ -74,11 +85,13 @@ export default function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, []);
+
   const openChat = (target: string) => {
     setDialogueTarget(target);
     if (document.pointerLockElement) document.exitPointerLock();
     setOpen(true);
   };
+
   async function login(action: "login" | "register") {
     setWorking(true);
     setError("");
@@ -93,6 +106,7 @@ export default function App() {
       setWorking(false);
     }
   }
+
   if (!token)
     return (
       <main className="login">
@@ -146,6 +160,7 @@ export default function App() {
         </form>
       </main>
     );
+
   return (
     <div className="game">
       {room && spawn ? (
@@ -161,6 +176,7 @@ export default function App() {
       ) : (
         <div className="loading">Подключаемся к острову…</div>
       )}
+
       <header className="hud">
         <b>Совет мудрецов</b>
         <span>
@@ -172,6 +188,11 @@ export default function App() {
         <button disabled={!room} onClick={() => room?.send("return_to_hall", {})}>
           В зал
         </button>
+
+         <button onClick={() => setShowAdmin(true)}>
+          Админка
+        </button>
+
         <button
           onClick={() => {
             localStorage.removeItem("island-token");
@@ -183,15 +204,19 @@ export default function App() {
           Выйти
         </button>
       </header>
+
       {error && (
         <div className="notice" role="alert">
           {error}
         </div>
       )}
+
       {interaction && !open && <div className="hint">E — {interaction.label}</div>}
+
       <footer className="controls">
         WASD — движение · Shift — бег · Пробел — прыжок · Esc — освободить мышь
       </footer>
+
       {room && (
         <DialoguePanel
           room={room}
@@ -205,6 +230,10 @@ export default function App() {
           council={council}
         />
       )}
+
+      {/* 🔥 NEW: Рендерим саму панель администратора */}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+
     </div>
   );
 }

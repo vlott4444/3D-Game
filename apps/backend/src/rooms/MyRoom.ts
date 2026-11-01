@@ -9,6 +9,7 @@ import { VisitorManager } from "../agents/VisitorManager.js";
 import { CouncilDirector, type CouncilTurn } from "../agents/CouncilDirector.js";
 import { canInteractAt } from "../world/InteractionZones.js";
 import { saveChatEntry, chatHistory, type ChatEntry } from "../database/chat.repo.js";
+import { metricsStore } from "../AdminMetrics.js";
 
 const online = new Set<string>();
 
@@ -25,8 +26,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private councilTurn: CouncilTurn | null = null;
 
   onCreate() {
-    // 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Запрещаем серверу удалять комнату, когда в ней никого нет.
-    // Это гарантирует, что второй игрок зайдет в ту же самую комнату, а не создаст новую.
     this.autoDispose = false;
 
     this.clock.setInterval(() => {
@@ -103,6 +102,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   messages = {
+
+    metrics: (client: Client, data: { fps: number }) => {
+      const username = client.auth?.username || "Unknown";
+
+      const ping = (client as any).ping || 0;
+
+      metricsStore.set(client.sessionId, {
+        username,
+        fps: data.fps,
+        ping: ping,
+        lastUpdate: Date.now()
+      });
+    },
+
     council_request: (client: Client) => client.send("council_turn", this.councilTurn),
 
     return_to_hall: (client: Client) => {
@@ -395,6 +408,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
       online.delete(client.auth.playerId);
     }
+    metricsStore.delete(client.sessionId);
+
     this.state.players.delete(client.sessionId);
     this.lastPose.delete(client.sessionId);
     this.streamedChunks.delete(client.sessionId);
