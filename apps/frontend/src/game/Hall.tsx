@@ -1,5 +1,6 @@
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import { Html } from "@react-three/drei";
+import DeskArrow from "./DeskArrow";
 function Block({
   position,
   size,
@@ -32,6 +33,7 @@ function Block({
 export default function Hall() {
   return (
     <group>
+      <DeskArrow />
       <Block position={[0, -0.08, -0.5]} size={[28, 0.2, 27]} color="#ddd1b4" />
       <Block position={[-14, 2.6, -0.5]} size={[0.5, 5.2, 27]} color="#c5bda8" />
       <Block position={[14, 2.6, -0.5]} size={[0.5, 5.2, 27]} color="#c5bda8" />
@@ -100,7 +102,7 @@ export default function Hall() {
             font: "bold 26px Georgia",
           }}
         >
-          СОВЕТ МУДРЕЦОВ
+          ЗАЛ ШЕСТИ МУДРЕЦОВ
         </div>
       </Html>
       <pointLight position={[0, 4, -2.5]} intensity={45} color="#ffe2a9" distance={24} />

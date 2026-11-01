@@ -88,18 +88,7 @@ export default function Visitor({ room }: { room: GameRoom }) {
         </mesh>
       ))}
       <Html center position={[0, 2.5, 0]}>
-        <span
-          style={{
-            background: "#735638",
-            color: "#fff2d2",
-            padding: "6px 10px",
-            borderRadius: 6,
-            whiteSpace: "nowrap",
-            font: "14px Arial",
-          }}
-        >
-          {visitor.name}
-        </span>
+        <span className="world-label">{visitor.name}</span>
       </Html>
     </group>
   );

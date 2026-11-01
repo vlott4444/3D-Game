@@ -1,3 +1,4 @@
+import { agentOverride } from "../admin.service.js";
 import { readFile } from "node:fs/promises";
 import { getDb } from "../database/db.js";
 import { OllamaClient } from "./OllamaClient.js";
@@ -10,6 +11,7 @@ type Request = {
   context?: string;
   caseContext?: { id: string; name: string; problem: string };
   worldUpdate?: string;
+  channel?: "private" | "council";
   roundReplies?: { name: string; text: string }[];
 };
 type Reply = { text: string; abstained?: boolean };
@@ -52,9 +54,9 @@ export class AgentService {
     const history = (
       db
         .prepare(
-          "SELECT role,content FROM dialogue WHERE player_id=? AND npc_id=? AND case_id IS ? ORDER BY id DESC LIMIT 8",
+          "SELECT role,content FROM dialogue WHERE player_id=? AND npc_id=? AND case_id IS ? AND channel=? ORDER BY id DESC LIMIT 8",
         )
-        .all(r.playerId, r.npcId, caseContext.id) as {
+        .all(r.playerId, r.npcId, caseContext.id, r.channel ?? "council") as {
         role: "user" | "assistant";
         content: string;
       }[]
@@ -83,7 +85,8 @@ export class AgentService {
 Обратись к ${reaction.name} и оцени именно этот довод через свои приоритеты: укажи обоснованное возражение, риск или полезное уточнение. Если согласен, назови условие, при котором предложение сработает, или способ его проверить. Не повторяй предложение и не спорь ради спора. Если действительно нечего добавить, ответь только [ВОЗДЕРЖУСЬ].`
       : "Ты отвечаешь первым или на отдельный вопрос. Дай полезный ответ или уточнение; не воздерживайся.";
     const system = `Ты ${profile.name}, участник игры «Совет мудрецов». Это художественная интерпретация.
-Характер: ${profile.personality}. Ты помогаешь разбирать задачи и аргументы.
+Характер: ${profile.personality}.
+Дополнительная инструкция администратора: ${agentOverride(r.npcId) || "нет"}. Ты помогаешь разбирать задачи и аргументы.
 ${character}
 Изменения окружения выполняет сервер. Не утверждай, что создал или удалил объект, если ниже нет подтверждения.
 Подтверждённый результат сервера: ${r.worldUpdate || "изменений по этому сообщению нет"}
@@ -120,10 +123,24 @@ ${reactionInstruction}`;
     db.exec("BEGIN IMMEDIATE");
     try {
       const insert = db.prepare(
-        "INSERT INTO dialogue(player_id,npc_id,role,content,case_id) VALUES (?,?,?,?,?)",
+        "INSERT INTO dialogue(player_id,npc_id,role,content,case_id,channel) VALUES (?,?,?,?,?,?)",
       );
-      insert.run(r.playerId, r.npcId, "user", r.message, caseContext.id);
-      insert.run(r.playerId, r.npcId, "assistant", text, caseContext.id);
+      insert.run(
+        r.playerId,
+        r.npcId,
+        "user",
+        r.message,
+        caseContext.id,
+        r.channel ?? "council",
+      );
+      insert.run(
+        r.playerId,
+        r.npcId,
+        "assistant",
+        text,
+        caseContext.id,
+        r.channel ?? "council",
+      );
       db.exec("COMMIT");
     } catch (e) {
       db.exec("ROLLBACK");

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import type { GameRoom } from "../network/GameConnection";
+import { useGlobalMessages } from "../network/GlobalMessages";
+import NPCPortrait from "./NPCPortrait";
 import { cast } from "../game/npc/cast";
 import type { VisitorState } from "../game/npc/Visitor";
 import type { CouncilTurn } from "../network/CouncilTurn";
@@ -53,18 +55,29 @@ export default function DialoguePanel({
   const request = useRef("");
   const person = cast.find((p) => p.id === target);
   const isPlayers = target === "players";
-  const caseId = isPlayers ? "players" : visitor?.id || "open-council";
-  const history = entries.filter(
-    (entry) => entry.target === target && entry.caseId === caseId,
-  );
+  const isPrivate = !!person;
+  const publicChat = useGlobalMessages(target === "all" ? room : null, "council");
+  const caseId = isPlayers
+    ? "players"
+    : isPrivate
+      ? `private:${target}`
+      : visitor?.id || "open-council";
+  const history =
+    target === "all"
+      ? publicChat.messages.map((entry) => ({
+          ...entry,
+          target: "all",
+          caseId: entry.caseId || "open-council",
+        }))
+      : entries.filter((entry) => entry.target === target && entry.caseId === caseId);
   const title = isPlayers ? "Чат игроков" : person?.name || "Совет мудрецов";
   const current = council?.members.find((p) => p.id === council.currentNpcId);
   const blocked =
     busy ||
     (!isPlayers &&
-      (!!council?.active ||
+      ((!isPrivate && !!council?.active) ||
         !canInteract ||
-        (!!visitor && visitor.phase !== "discussing")));
+        (!isPrivate && !!visitor && visitor.phase !== "discussing")));
 
   useEffect(() => {
     const off = [
@@ -133,7 +146,11 @@ export default function DialoguePanel({
       <header className="dialogue-header">
         <div>
           <small>
-            {isPlayers ? "ИГРОКИ КОМНАТЫ" : person ? person.title : "ОБСУЖДЕНИЕ ЗАДАЧ"}
+            {isPlayers
+              ? "ИГРОКИ КОМНАТЫ"
+              : person
+                ? `ЛИЧНЫЙ РАЗГОВОР · ${person.title}`
+                : "ОБСУЖДЕНИЕ ЗАДАЧ"}
           </small>
           <h2>{title}</h2>
         </div>
@@ -165,9 +182,11 @@ export default function DialoguePanel({
           <div className="conversation-context">
             {isPlayers
               ? "Сообщения игрокам этой комнаты"
-              : visitor
-                ? `Задача посетителя: ${visitor.name}`
-                : "Обсуди собственную задачу или пригласи посетителя у стола"}
+              : isPrivate
+                ? "Личная переписка: видна только тебе и сохраняется в аккаунте"
+                : visitor
+                  ? `Задача посетителя: ${visitor.name}`
+                  : "Обсуди собственную задачу или пригласи посетителя у стола"}
           </div>
           <div
             ref={log}
@@ -182,6 +201,15 @@ export default function DialoguePanel({
                   node.scrollHeight - node.scrollTop - node.clientHeight < 100;
             }}
           >
+            {target === "all" && publicChat.hasMore && (
+              <button
+                type="button"
+                className="load-history"
+                onClick={publicChat.loadOlder}
+              >
+                Показать более ранние сообщения
+              </button>
+            )}
             {!history.length && (
               <div className="chat-empty">
                 <b>
@@ -221,7 +249,7 @@ export default function DialoguePanel({
             ))}
           </div>
           <div className="dialogue-progress" role="status">
-            {!isPlayers && council?.active
+            {!isPlayers && !isPrivate && council?.active
               ? current
                 ? `${current.name} готовит ответ…`
                 : "Совет обдумывает задачу…"
@@ -229,9 +257,9 @@ export default function DialoguePanel({
                 ? "Отправляем сообщение…"
                 : !isPlayers && !canInteract
                   ? "Для продолжения закрой окно и подойди к собеседнику или столу."
-                  : !isPlayers && visitor?.phase === "arriving"
+                  : !isPlayers && !isPrivate && visitor?.phase === "arriving"
                     ? "Посетитель входит в зал…"
-                    : !isPlayers && visitor?.phase === "leaving"
+                    : !isPlayers && !isPrivate && visitor?.phase === "leaving"
                       ? "Посетитель завершает приём…"
                       : " "}
           </div>
@@ -284,6 +312,7 @@ export default function DialoguePanel({
             </div>
             {person && (
               <section className="profile-card">
+                {open && <NPCPortrait npcId={target} />}
                 <h3>{person.name}</h3>
                 <small>{person.title}</small>
                 <p>{person.summary}</p>
@@ -415,8 +444,9 @@ export default function DialoguePanel({
               ))}
             </details>
             <p className="muted">
-              Реплики видны игрокам этой комнаты. Для смены собеседника закрой окно и
-              подойди к нужному мудрецу. Общий разговор открывается у стола.
+              {isPrivate
+                ? "Этот разговор виден только тебе. Для смены собеседника подойди к другому мудрецу."
+                : "Общая переписка доступна всем игрокам сервера. Чтобы участвовать в обсуждении или пригласить посетителя, подойди к столу."}
             </p>
           </aside>
         )}

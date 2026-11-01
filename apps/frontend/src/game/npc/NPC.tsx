@@ -15,10 +15,12 @@ export default function NPC({
   person,
   playerNearby = false,
   speaking = false,
+  portrait = false,
 }: {
   person: Person;
   playerNearby?: boolean;
   speaking?: boolean;
+  portrait?: boolean;
 }) {
   const head = useRef<Group>(null);
   const gesture = useRef<Group>(null);
@@ -61,19 +63,20 @@ export default function NPC({
     <RigidBody
       type="fixed"
       colliders={false}
-      position={person.position as [number, number, number]}
-      rotation={[0, facing, 0]}
+      position={portrait ? [0, 0, 0] : (person.position as [number, number, number])}
+      rotation={[0, portrait ? 0 : facing, 0]}
     >
-      <CylinderCollider args={[1, 0.65]} position={[0, 1, 0]} />
-      {box([0, 0.62, 0], [1.15, 0.18, 1.05], "#715238")}
-      {box([0, 1.2, -0.48], [1.15, 1.25, 0.16], "#715238")}
-      {[-0.45, 0.45].flatMap((x) =>
-        [-0.4, 0.4].map((z) => (
-          <group key={`${x}:${z}`}>
-            {box([x, 0.3, z], [0.12, 0.6, 0.12], "#4f3b2b")}
-          </group>
-        )),
-      )}
+      {!portrait && <CylinderCollider args={[1, 0.65]} position={[0, 1, 0]} />}
+      {!portrait && box([0, 0.62, 0], [1.15, 0.18, 1.05], "#715238")}
+      {!portrait && box([0, 1.2, -0.48], [1.15, 1.25, 0.16], "#715238")}
+      {!portrait &&
+        [-0.45, 0.45].flatMap((x) =>
+          [-0.4, 0.4].map((z) => (
+            <group key={`${x}:${z}`}>
+              {box([x, 0.3, z], [0.12, 0.6, 0.12], "#4f3b2b")}
+            </group>
+          )),
+        )}
       {box([0, 1.08, 0], [0.8, 0.85, 0.46], person.color)}
       {[-0.22, 0.22].map((x) => (
         <group key={x}>
@@ -138,27 +141,28 @@ export default function NPC({
           </mesh>
         )}
       </group>
-      <Html position={[0, 2.5, 0]} center distanceFactor={16}>
-        <span
-          style={{
-            display: "block",
-            width: "max-content",
-            textAlign: "center",
-            whiteSpace: "nowrap",
-            background: speaking ? "#775b2b" : playerNearby ? "#284b4d" : "#293f46",
-            color: "#fff1d2",
-            padding: "5px 9px",
-            borderRadius: 6,
-            font: "13px Arial",
-            pointerEvents: "none",
-          }}
-        >
-          {person.name}
-          <small style={{ display: "block", fontSize: 9, opacity: 0.85 }}>
-            {speaking ? "Готовит ответ…" : person.title}
-          </small>
-        </span>
-      </Html>
+      {!portrait && (
+        <Html position={[0, 2.5, 0]} center distanceFactor={16}>
+          <span
+            style={{
+              display: "block",
+              width: "max-content",
+              textAlign: "center",
+              whiteSpace: "nowrap",
+              color: "#ffffff",
+              font: "bold 13px Arial",
+              WebkitTextStroke: "0.55px #000",
+              textShadow: "-1px -1px 1px #000, 1px 1px 1px #000, 0 2px 4px #000",
+              pointerEvents: "none",
+            }}
+          >
+            {person.name}
+            <small style={{ display: "block", fontSize: 9, opacity: 0.85 }}>
+              {speaking ? "Готовит ответ…" : person.title}
+            </small>
+          </span>
+        </Html>
+      )}
     </RigidBody>
   );
 }

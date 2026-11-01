@@ -59,3 +59,15 @@ CREATE TABLE IF NOT EXISTS world_edit_log (
   agent_id TEXT NOT NULL, player_id TEXT NOT NULL, revision INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS global_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT NOT NULL CHECK(channel IN ('players','council')),
+  speaker TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, npc_id TEXT,
+  created_at INTEGER NOT NULL, case_id TEXT, reaction_name TEXT, reaction_text TEXT,
+  source_entry_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS global_messages_channel_id ON global_messages(channel,id);
+
+CREATE TABLE IF NOT EXISTS server_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS agent_overrides(npc_id TEXT PRIMARY KEY, prompt TEXT NOT NULL, updated_at INTEGER NOT NULL);

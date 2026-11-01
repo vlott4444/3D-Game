@@ -23,6 +23,25 @@ export function initDb(
   }[];
   if (!dialogueColumns.some((c) => c.name === "case_id"))
     db.exec("ALTER TABLE dialogue ADD COLUMN case_id TEXT");
+  if (!dialogueColumns.some((c) => c.name === "channel"))
+    db.exec("ALTER TABLE dialogue ADD COLUMN channel TEXT NOT NULL DEFAULT 'council'");
+  // Import only previously public messages, once. Private account history stays private.
+  const globalColumns = db.prepare("PRAGMA table_info(global_messages)").all() as {
+    name: string;
+  }[];
+  for (const [name, type] of [
+    ["case_id", "TEXT"],
+    ["reaction_name", "TEXT"],
+    ["reaction_text", "TEXT"],
+    ["source_entry_id", "INTEGER"],
+  ]) {
+    if (!globalColumns.some((c) => c.name === name))
+      db.exec(`ALTER TABLE global_messages ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS global_messages_source ON global_messages(source_entry_id);
+    INSERT OR IGNORE INTO global_messages(channel,speaker,kind,text,npc_id,created_at,case_id,reaction_name,reaction_text,source_entry_id)
+    SELECT CASE target WHEN 'players' THEN 'players' ELSE 'council' END,speaker,kind,text,npc_id,created_at,case_id,reaction_name,reaction_text,id
+    FROM chat_entries WHERE target IN ('players','all');`);
   seedVisitors(db);
   return db;
 }

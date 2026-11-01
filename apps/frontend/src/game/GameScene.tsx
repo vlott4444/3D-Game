@@ -1,3 +1,4 @@
+import GameMetrics from "./GameMetrics";
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { cast } from "./npc/cast";
@@ -50,6 +51,7 @@ export default function GameScene({
       }}
     >
       <RenderBudget dialogueOpen={dialogueOpen} />
+      <GameMetrics room={room} />
       {/* Цвет неба */}
       <color attach="background" args={["#bccdc5"]} />
 

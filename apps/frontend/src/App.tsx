@@ -1,6 +1,9 @@
+import { AdminPanel } from "./ui/AdminPanel";
 import { useEffect, useState } from "react";
 import GameScene from "./game/GameScene";
 import DialoguePanel from "./ui/DialoguePanel";
+import PrivateDialoguePanel from "./ui/PrivateDialoguePanel";
+import PlayerChat from "./ui/PlayerChat";
 import { authenticate, connectToGame, type GameRoom } from "./network/GameConnection";
 import "./style.css";
 import type { InteractionTarget } from "./game/npc/interactionTarget";
@@ -14,6 +17,8 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [interaction, setInteraction] = useState<InteractionTarget | null>(null);
   const [dialogueTarget, setDialogueTarget] = useState("players");
   const [open, setOpen] = useState(false);
@@ -22,8 +27,14 @@ export default function App() {
   const [ambientCount, setAmbientCount] = useState(0);
   const [feedback, setFeedback] = useState("");
   const council = useCouncilTurn(room);
+  const ActiveDialogue =
+    dialogueTarget !== "all" && dialogueTarget !== "players"
+      ? PrivateDialoguePanel
+      : DialoguePanel;
   useEffect(() => {
     if (!token) return;
+    setIsAdmin(false);
+    setShowAdmin(false);
     let disposed = false;
     let active: GameRoom | null = null;
     connectToGame(token)
@@ -33,6 +44,8 @@ export default function App() {
           return;
         }
         active = r;
+        r.onMessage("is_admin", (value: boolean) => setIsAdmin(value));
+        r.send("admin_request", {});
         const ready = (s: any) => {
           const p = s?.players?.get(r.sessionId);
           if (p) {
@@ -76,10 +89,26 @@ export default function App() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.code === "Escape") setOpen(false);
+      if (
+        e.code === "KeyC" &&
+        !e.repeat &&
+        room &&
+        !showAdmin &&
+        !(
+          e.target instanceof HTMLElement &&
+          (e.target.isContentEditable ||
+            ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName))
+        )
+      ) {
+        e.preventDefault();
+        setDialogueTarget("all");
+        if (document.pointerLockElement) document.exitPointerLock();
+        setOpen((value) => !value);
+      }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, []);
+  }, [room, showAdmin]);
   useEffect(() => {
     if (!feedback) return;
     const timer = window.setTimeout(() => setFeedback(""), 6000);
@@ -90,6 +119,7 @@ export default function App() {
       if (
         !room ||
         open ||
+        showAdmin ||
         event.repeat ||
         (event.target instanceof HTMLElement &&
           (event.target.isContentEditable ||
@@ -103,7 +133,7 @@ export default function App() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [room, open]);
+  }, [room, open, showAdmin]);
   const openChat = (target: string) => {
     setDialogueTarget(target);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -182,23 +212,35 @@ export default function App() {
         <GameScene
           room={room}
           initialPose={spawn}
-          dialogueOpen={open}
+          dialogueOpen={open || showAdmin}
           interaction={interaction}
           onNearbyChange={setInteraction}
           onInteract={openChat}
           council={council}
         />
       ) : (
-        <div className="loading">Подключаемся к острову…</div>
+        <div className="loading">Подключаемся к залу…</div>
       )}
+      <PlayerChat room={room} />
       <header className="hud">
+        {isAdmin && (
+          <button
+            onClick={() => {
+              setOpen(false);
+              setShowAdmin(true);
+              if (document.pointerLockElement) document.exitPointerLock();
+            }}
+          >
+            Админка
+          </button>
+        )}
         <b>Совет мудрецов</b>
         <span>
           {room ? "В игре" : "Нет соединения"} · {saved} · Чанков: {chunkCount}/9 · NPC:{" "}
           {ambientCount}
         </span>
-        <button onClick={() => openChat("players")} disabled={!room}>
-          Чат игроков
+        <button onClick={() => openChat("all")} disabled={!room}>
+          Совет (C)
         </button>
         <button
           disabled={!room || open}
@@ -238,10 +280,14 @@ export default function App() {
       )}
       {interaction && !open && <div className="hint">E — {interaction.label}</div>}
       <footer className="controls">
-        WASD — движение · Shift — бег · Пробел — прыжок · Esc — освободить мышь
+        WASD — движение · Shift — бег · Пробел — прыжок · C — совет · Esc — освободить
+        мышь
       </footer>
+      {showAdmin && isAdmin && (
+        <AdminPanel token={token} onClose={() => setShowAdmin(false)} />
+      )}
       {room && (
-        <DialoguePanel
+        <ActiveDialogue
           room={room}
           open={open}
           onClose={() => setOpen(false)}

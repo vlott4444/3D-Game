@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mergedChatTests } from "./merged-chat.test.js";
 import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import { ColyseusSDK } from "@colyseus/sdk";
 import app from "../src/app.config.js";
@@ -44,6 +45,7 @@ async function walkTo(room: any, x: number, z: number) {
   }
 }
 describe("Authenticated WebSocket flow", function () {
+  mergedChatTests(endpoint);
   this.timeout(30000);
   let server: ColyseusTestServer;
   let a: any;
@@ -194,7 +196,7 @@ describe("Authenticated WebSocket flow", function () {
     assert.deepEqual(named, ["lovelace", "socrates"]);
   });
   it("does not interleave two players' council turns while a model call is pending", async () => {
-    await walkTo(a, -6, -2);
+    await walkTo(a, 0, 0);
     const previousFetch = globalThis.fetch;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -208,8 +210,8 @@ describe("Authenticated WebSocket flow", function () {
       const started = message(b, "council_turn");
       const doneA = message(a, "dialogue_done");
       a.send("chat", {
-        text: "Проверь гипотезу",
-        target: "einstein",
+        text: "Эйнштейн, проверь гипотезу",
+        target: "all",
         requestId: "slow-turn",
       });
       assert.equal((await started).active, true);

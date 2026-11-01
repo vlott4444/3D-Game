@@ -28,9 +28,7 @@ export default function RemotePlayers({ room }: { room: GameRoom }) {
               <meshStandardMaterial color="#e8c4a4" />
             </mesh>
             <Html center position={[0, 2.5, 0]}>
-              <span style={{ color: "white", background: "#234", whiteSpace: "nowrap" }}>
-                {p.username}
-              </span>
+              <span className="world-label">{p.username}</span>
             </Html>
           </group>
         ))}

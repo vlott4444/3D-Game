@@ -1,3 +1,10 @@
+import { isAdministrator } from "../admin.service.js";
+import { metricsStore } from "../AdminMetrics.js";
+import {
+  globalHistory,
+  onGlobalMessage,
+  publishGlobal,
+} from "../database/global-chat.repo.js";
 import { Room, Client } from "colyseus";
 import { MyRoomState, Player } from "./schema/MyRoomState.js";
 import { findById, saveState } from "../database/players.repo.js";
@@ -23,6 +30,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 8;
   state = new MyRoomState();
   private busy = new Set<string>();
+  private lastPlayerChat = new Map<string, number>();
+  private lastMetrics = new Map<string, number>();
+  private lastPing = new Map<string, number>();
+  private offGlobal?: () => void;
   private lastPose = new Map<string, number>();
   private discussion: string[] = [];
   private streamedChunks = new Map<string, string>();
@@ -67,6 +78,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastAmbient = now;
   }
   onCreate() {
+    this.offGlobal = onGlobalMessage((entry, legacy) => {
+      this.broadcast("global_chat:message", entry);
+      if (legacy) this.broadcast("dialogue", legacy);
+    });
     // Keep the shared council room available when its last player disconnects.
     this.autoDispose = false;
     this.offWorld = onWorldChange((change) => {
@@ -119,15 +134,127 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return !!player && canInteractAt(player.x, player.y, target);
   }
   private historyCase(target: string) {
-    return target === "players" ? "players" : this.visitors.current?.id || "open-council";
+    return target === "players"
+      ? "players"
+      : target !== "all"
+        ? `private:${target}`
+        : this.visitors.current?.id || "open-council";
   }
   private publish(entry: ChatEntry, ownerId: string) {
-    const saved = saveChatEntry(entry, [
-      ownerId,
-      ...this.clients.map((client) => client.auth?.playerId).filter(Boolean),
-    ]);
-    this.broadcast("dialogue", saved);
+    const isPublic = entry.target === "all" || entry.target === "players";
+    const saved = saveChatEntry(
+      entry,
+      isPublic
+        ? [ownerId, ...this.clients.map((c) => c.auth?.playerId).filter(Boolean)]
+        : [ownerId],
+    );
+    if (isPublic)
+      publishGlobal(entry.target === "players" ? "players" : "council", saved);
+    else this.clients.find((c) => c.auth?.playerId === ownerId)?.send("dialogue", saved);
     return saved;
+  }
+  private async privateDialogue(client: Client, raw: unknown) {
+    if (!raw || typeof raw !== "object") return;
+    const m = raw as Record<string, unknown>;
+    const npcId = m.npcId ?? m.target;
+    const requestId = m.requestId;
+    if (typeof requestId !== "string" || requestId.length > 80) return;
+    const done = (error?: string) => {
+      client.send("private_npc:done", { requestId, error });
+      client.send("dialogue_done", { requestId, error });
+    };
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (
+      typeof npcId !== "string" ||
+      !cast.some((n) => n.id === npcId) ||
+      typeof m.text !== "string" ||
+      !m.text.trim() ||
+      m.text.length > 600
+    ) {
+      done("Некорректное личное сообщение");
+      return;
+    }
+    if (!this.canTalk(client, npcId)) {
+      done("Для разговора подойди к выбранному мудрецу");
+      return;
+    }
+    if (this.busy.has(client.sessionId)) {
+      done("Дождись предыдущего ответа");
+      return;
+    }
+    this.busy.add(client.sessionId);
+    const person = cast.find((n) => n.id === npcId)!;
+    const caseId = this.historyCase(npcId);
+    let failure: string | undefined;
+    try {
+      const text = m.text.trim();
+      this.ambient.stimulate(client.sessionId, "talk", player.x, player.y, Date.now());
+      this.publish(
+        {
+          target: npcId,
+          caseId,
+          speaker: player.username,
+          text,
+          kind: "player",
+          requestId,
+        },
+        client.auth.playerId,
+      );
+      const command = classifyWorldCommand(text);
+      const worldUpdate = command
+        ? applyWorldCommand(command, npcId, client.auth.playerId).text
+        : undefined;
+      if (worldUpdate)
+        this.publish(
+          {
+            target: npcId,
+            caseId,
+            speaker: `Окружение · ${person.name}`,
+            text: worldUpdate,
+            kind: "world",
+            requestId,
+          },
+          client.auth.playerId,
+        );
+      const result = await agentService.reply({
+        playerId: client.auth.playerId,
+        npcId,
+        message: text,
+        channel: "private",
+        worldUpdate,
+        caseContext: {
+          id: caseId,
+          name: player.username,
+          problem: "Личная задача игрока: " + text,
+        },
+      });
+      this.publish(
+        {
+          target: npcId,
+          caseId,
+          speaker: person.name,
+          npcId,
+          text: result.text,
+          kind: "npc",
+          requestId,
+        },
+        client.auth.playerId,
+      );
+      client.send("private_npc:reply", {
+        npcId,
+        requestId,
+        speaker: person.name,
+        kind: "npc",
+        text: result.text,
+      });
+    } catch (error) {
+      console.error("Private NPC failure", npcId, error);
+      failure = "Не удалось получить ответ. Проверь локальную модель и сервер.";
+    } finally {
+      this.busy.delete(client.sessionId);
+      done(failure);
+    }
   }
   static async onAuth(token: string) {
     const auth = verifyToken(token);
@@ -160,8 +287,110 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     });
     this.state.players.set(client.sessionId, p);
     this.lastPose.set(client.sessionId, Date.now() - 100);
+    publishGlobal("players", {
+      speaker: "Система",
+      kind: "system",
+      text: `${p.username} подключился к серверу`,
+    });
   }
   messages = {
+    admin_request: (client: Client) => {
+      if (this.state.players.has(client.sessionId))
+        client.send("is_admin", isAdministrator(client.auth.playerId));
+    },
+    "metrics:ping": (client: Client, raw: unknown) => {
+      if (!this.state.players.has(client.sessionId) || !raw || typeof raw !== "object")
+        return;
+      const nonce = (raw as { nonce?: unknown }).nonce,
+        now = Date.now();
+      if (
+        typeof nonce !== "number" ||
+        !Number.isFinite(nonce) ||
+        now - (this.lastPing.get(client.sessionId) || 0) < 500
+      )
+        return;
+      this.lastPing.set(client.sessionId, now);
+      client.send("metrics:pong", { nonce });
+    },
+    metrics: (client: Client, raw: unknown) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !raw || typeof raw !== "object") return;
+      const { fps, ping } = raw as Record<string, unknown>,
+        now = Date.now();
+      if (
+        typeof fps !== "number" ||
+        !Number.isFinite(fps) ||
+        fps < 0 ||
+        fps > 1000 ||
+        typeof ping !== "number" ||
+        !Number.isFinite(ping) ||
+        ping < 0 ||
+        ping > 60000 ||
+        now - (this.lastMetrics.get(client.sessionId) || 0) < 500
+      )
+        return;
+      this.lastMetrics.set(client.sessionId, now);
+      metricsStore.set(`${this.roomId}:${client.sessionId}`, {
+        username: player.username,
+        fps: Math.round(fps),
+        ping: Math.round(ping),
+        lastUpdate: now,
+      });
+    },
+    "global_chat:history_request": (client: Client, raw: unknown) => {
+      if (!this.state.players.has(client.sessionId) || !raw || typeof raw !== "object")
+        return;
+      const m = raw as Record<string, unknown>;
+      if (m.channel !== "players" && m.channel !== "council") return;
+      const before =
+        typeof m.beforeId === "number" &&
+        Number.isSafeInteger(m.beforeId) &&
+        m.beforeId > 0
+          ? m.beforeId
+          : undefined;
+      client.send("global_chat:history", globalHistory(m.channel, before));
+    },
+    "global_chat:send": (client: Client, raw: unknown) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || !raw || typeof raw !== "object") return;
+      const m = raw as Record<string, unknown>;
+      if (typeof m.text !== "string" || !m.text.trim() || m.text.length > 600) return;
+      const now = Date.now();
+      if (now - (this.lastPlayerChat.get(client.sessionId) || 0) < 500) {
+        client.send("global_chat:error", {
+          text: "Не отправляй сообщения слишком часто",
+        });
+        return;
+      }
+      this.lastPlayerChat.set(client.sessionId, now);
+      this.ambient.stimulate(client.sessionId, "talk", p.x, p.y, now);
+      this.publish(
+        {
+          target: "players",
+          caseId: "players",
+          speaker: p.username,
+          kind: "player",
+          text: m.text.trim(),
+        },
+        client.auth.playerId,
+      );
+    },
+    "private_npc:send": (client: Client, raw: unknown) =>
+      this.privateDialogue(client, raw),
+    "private_npc:history_request": (client: Client, raw: unknown) => {
+      const npcId =
+        raw && typeof raw === "object" ? (raw as { npcId?: unknown }).npcId : undefined;
+      if (
+        !this.state.players.has(client.sessionId) ||
+        typeof npcId !== "string" ||
+        !cast.some((n) => n.id === npcId)
+      )
+        return;
+      client.send("private_npc:history", {
+        npcId,
+        messages: chatHistory(client.auth.playerId, npcId, this.historyCase(npcId)),
+      });
+    },
     ambient_request: (client: Client) => {
       this.ambientSubscribers.add(client.sessionId);
       const now = Date.now();
@@ -305,6 +534,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     chat: async (client: Client, m: unknown) => {
       if (!m || typeof m !== "object") return;
       const { text, target, requestId } = m as Record<string, unknown>;
+      if (typeof target === "string" && cast.some((n) => n.id === target)) {
+        await this.privateDialogue(client, m);
+        return;
+      }
       if (
         typeof text !== "string" ||
         !text.trim() ||
@@ -500,11 +733,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
   };
   onDispose() {
+    this.offGlobal?.();
     this.offWorld?.();
   }
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     if (p) {
+      publishGlobal("players", {
+        speaker: "Система",
+        kind: "system",
+        text: `${p.username} вышел с сервера`,
+      });
       saveState(client.auth.playerId, {
         roomId: this.roomId,
         posX: p.x,
@@ -516,6 +755,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     this.state.players.delete(client.sessionId);
     this.lastPose.delete(client.sessionId);
+    this.lastMetrics.delete(client.sessionId);
+    this.lastPing.delete(client.sessionId);
+    metricsStore.delete(`${this.roomId}:${client.sessionId}`);
+    this.lastPlayerChat.delete(client.sessionId);
     this.streamedChunks.delete(client.sessionId);
     this.ambientSubscribers.delete(client.sessionId);
     this.motion.delete(client.sessionId);
