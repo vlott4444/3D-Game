@@ -1,3 +1,4 @@
+import { Sky } from "@react-three/drei";
 import GameMetrics from "./GameMetrics";
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
@@ -53,15 +54,25 @@ export default function GameScene({
       <RenderBudget dialogueOpen={dialogueOpen} />
       <GameMetrics room={room} />
       {/* Цвет неба */}
-      <color attach="background" args={["#bccdc5"]} />
+      <color attach="background" args={["#d4e0db"]} />
+      <Sky
+        sunPosition={[40, 70, 20]}
+        turbidity={3}
+        rayleigh={0.7}
+        mieCoefficient={0.005}
+        mieDirectionalG={0.8}
+      />
 
       {/* Основной свет */}
-      <fog attach="fog" args={["#bccdc5", 60, 145]} />
-      <ambientLight intensity={0.95} />
+      <fog attach="fog" args={["#d4e0db", 90, 215]} />
+      <hemisphereLight args={["#e3f2ff", "#8c7858", 1.1]} />
 
       <directionalLight
         position={[10, 15, 5]}
-        intensity={2}
+        intensity={2.3}
+        color="#fff0d2"
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.03}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-30}

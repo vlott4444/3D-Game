@@ -1,3 +1,4 @@
+import { insideWorld, clampWorld } from "../world/TerrainGenerator.js";
 import { interactiveWorld, type PhysicalPlayer } from "../world/InteractiveWorld.js";
 import { isAdministrator } from "../admin.service.js";
 import { metricsStore } from "../AdminMetrics.js";
@@ -111,6 +112,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.clock.setInterval(() => {
       const now = Date.now();
       this.updateAmbient(now);
+      if (++this.ambientStep % 2 === 0)
+        for (const client of this.clients)
+          if (this.ambientSubscribers.has(client.sessionId)) {
+            const p = this.state.players.get(client.sessionId);
+            if (p) client.send("ambient_snapshot", this.ambient.snapshot(p.x, p.y, now));
+          }
+    }, 100);
+    this.clock.setInterval(() => {
+      const now = Date.now();
       const objectWorld = interactiveWorld();
       objectWorld.setPlayers(
         this.roomId,
@@ -119,19 +129,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           .filter((p): p is PhysicalPlayer => !!p),
       );
       objectWorld.update(now);
-      if (this.ambientStep % 2 === 0)
-        for (const client of this.clients) {
-          const player = this.physicalPlayer(client);
-          if (player && this.objectSubscribers.has(client.sessionId))
-            client.send("object_snapshot", objectWorld.snapshot(player));
-        }
-      if (++this.ambientStep % 2 === 0)
-        for (const client of this.clients)
-          if (this.ambientSubscribers.has(client.sessionId)) {
-            const p = this.state.players.get(client.sessionId);
-            if (p) client.send("ambient_snapshot", this.ambient.snapshot(p.x, p.y, now));
-          }
-    }, 100);
+      for (const client of this.clients) {
+        const player = this.physicalPlayer(client);
+        if (player && this.objectSubscribers.has(client.sessionId))
+          client.send("object_snapshot", objectWorld.snapshot(player));
+      }
+    }, 50);
     this.clock.setInterval(() => {
       if (this.visitors.advance(Date.now()))
         this.broadcast("visitor_state", this.visitors.snapshot());
@@ -314,8 +317,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       Math.abs(row.pos_x) < 10000000 &&
       Math.abs(row.pos_y) < 10000000;
     const p = new Player({
-      x: saved ? row.pos_x : 0,
-      y: saved ? row.pos_y : 0,
+      x: saved ? clampWorld(row.pos_x) : 0,
+      y: saved ? clampWorld(row.pos_y) : 0,
       height: saved ? row.height : 1.18,
       rotY: saved ? row.rot_y : 0,
       username: row.username,
@@ -323,6 +326,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       vy: 0,
     });
     this.state.players.set(client.sessionId, p);
+    if (saved && !insideWorld(row.pos_x, row.pos_y))
+      client.send("world_feedback", {
+        text: "Сохранённая позиция за новой границей карты: вход у ближайшего края. Исходная БД сохранена в резервной копии обновления.",
+      });
     this.lastPose.set(client.sessionId, Date.now() - 100);
     publishGlobal("players", {
       speaker: "Система",
@@ -563,7 +570,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         !["x", "z", "height", "rotY", "seq"].every(
           (k) => typeof v[k] === "number" && Number.isFinite(v[k]),
         ) ||
-        Math.abs(v.x) >= 10000000 ||
+        !insideWorld(v.x, v.z) ||
         Math.abs(v.z) >= 10000000 ||
         v.height < 1.15 ||
         v.height > 20

@@ -381,6 +381,12 @@ describe("Authenticated WebSocket flow", function () {
     state = await message(a, "ambient_snapshot");
     assert.ok(state.actors.some((actor: any) => actor.mode === "look"));
     await new Promise((resolve) => setTimeout(resolve, 6600));
+    const animal = state.actors
+      .filter((actor: any) => actor.kind === "deer")
+      .sort((u: any, v: any) => Math.hypot(u.x, u.z - 18) - Math.hypot(v.x, v.z - 18))[0];
+    assert.ok(animal, "The surrounding forest should contain wildlife");
+    await walkTo(a, animal.x, animal.z);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
     const foodFeedback = message(a, "world_feedback");
     a.send("ambient_action", { action: "feed" });
     await foodFeedback;

@@ -9,6 +9,9 @@ type Props = {
   yawRef: RefObject<number>;
 };
 
+const wallRay = new THREE.Raycaster();
+wallRay.layers.set(3);
+const wallDirection = new THREE.Vector3();
 const desiredPosition = new THREE.Vector3();
 const desiredLookAt = new THREE.Vector3();
 const currentLookAt = new THREE.Vector3(0, 1.3, 0);
@@ -60,7 +63,7 @@ export default function FollowCamera({ target, yawRef }: Props): null {
     };
   }, [gl, yawRef]);
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera, scene }, delta) => {
     const body = target.current;
     if (!body) return;
 
@@ -78,6 +81,15 @@ export default function FollowCamera({ target, yawRef }: Props): null {
       position.z + Math.cos(yaw) * horizontalDistance,
     );
 
+    desiredLookAt.set(position.x, position.y + 0.2, position.z);
+    wallDirection.copy(desiredPosition).sub(desiredLookAt);
+    wallRay.set(desiredLookAt, wallDirection.clone().normalize());
+    wallRay.far = wallDirection.length();
+    const wall = wallRay.intersectObject(scene, true)[0];
+    if (wall)
+      desiredPosition
+        .copy(desiredLookAt)
+        .addScaledVector(wallRay.ray.direction, Math.max(0.4, wall.distance - 0.25));
     const smoothing = 1 - Math.exp(-8 * Math.min(delta, 0.05));
 
     camera.position.lerp(desiredPosition, smoothing);

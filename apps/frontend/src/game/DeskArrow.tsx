@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+import WorldLabel from "./WorldLabel";
 import type { Group } from "three";
 
 export default function DeskArrow() {
@@ -31,9 +31,9 @@ export default function DeskArrow() {
             emissiveIntensity={0.6}
           />
         </mesh>
-        <Html center position={[0, 1.05, 0]} distanceFactor={10}>
+        <WorldLabel center position={[0, 0.6, 0]} distanceFactor={10}>
           <span className="world-label desk-label">К столу · E</span>
-        </Html>
+        </WorldLabel>
       </group>
       <pointLight position={[0, 2.65, 0]} intensity={5} color="#ffe7a4" distance={4} />
     </group>

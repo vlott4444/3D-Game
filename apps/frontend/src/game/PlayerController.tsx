@@ -1,3 +1,5 @@
+import { WORLD_BOUNDS } from "../network/WorldCache";
+import { localPoses } from "../network/InteractiveState";
 import ObjectInteraction from "./world/ObjectInteraction";
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -72,8 +74,8 @@ export default function PlayerController({
     if (!body || clock.elapsedTime - lastSend.current < 0.2) return;
     lastSend.current = clock.elapsedTime;
     const p = body.translation();
-    const x = p.x;
-    const z = p.z;
+    const x = Math.max(WORLD_BOUNDS.min + 1, Math.min(WORLD_BOUNDS.max - 1, p.x));
+    const z = Math.max(WORLD_BOUNDS.min + 1, Math.min(WORLD_BOUNDS.max - 1, p.z));
     if (p.y < -5) {
       body.setTranslation({ x: initialPose.x, y: BODY_HEIGHT, z: initialPose.z }, true);
       return;
@@ -239,6 +241,12 @@ export default function PlayerController({
     // -----------------------------
 
     const position = body.translation();
+    localPoses.set(room, {
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      rotY: yawRef.current,
+    });
 
     const ray = new rapier.Ray(
       {

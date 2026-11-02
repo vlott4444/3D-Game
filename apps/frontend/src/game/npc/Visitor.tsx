@@ -1,6 +1,9 @@
+import CitizenModel from "./CitizenModel";
+import { RigidBody, CapsuleCollider, type RapierRigidBody } from "@react-three/rapier";
+import WorldLabel from "../WorldLabel";
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+
 import type { Group } from "three";
 import type { GameRoom } from "../../network/GameConnection";
 export type VisitorState = {
@@ -16,6 +19,8 @@ export type VisitorState = {
 export default function Visitor({ room }: { room: GameRoom }) {
   const [visitor, setVisitor] = useState<VisitorState | null>(null);
   const body = useRef<Group>(null);
+  const collider = useRef<RapierRigidBody>(null);
+  const walking = useRef(false);
   const received = useRef(0);
   useEffect(() => {
     const off = room.onMessage("visitor_state", (v: VisitorState | null) => {
@@ -43,53 +48,26 @@ export default function Visitor({ room }: { room: GameRoom }) {
       z,
     );
     body.current.rotation.y = visitor.phase === "leaving" ? 0 : Math.PI;
+    walking.current = visitor.phase !== "discussing" && progress < 1;
+    collider.current?.setNextKinematicTranslation({ x: 0, y: 1, z });
   });
   if (!visitor) return null;
   return (
-    <group ref={body}>
-      <mesh position={[0, 1.05, 0]} castShadow>
-        <boxGeometry args={[0.7, 1.05, 0.4]} />
-        <meshStandardMaterial
-          color={
-            visitor.category === "ecology"
-              ? "#668459"
-              : visitor.category === "education"
-                ? "#866c9b"
-                : visitor.category === "energy"
-                  ? "#658398"
-                  : "#b8834c"
-          }
-        />
-      </mesh>
-      <mesh position={[0, 1.85, 0]} castShadow>
-        <sphereGeometry args={[0.3, 14, 12]} />
-        <meshStandardMaterial color="#dcb28c" />
-      </mesh>
-      {[-0.2, 0.2].map((x) => (
-        <mesh key={x} position={[x, 0.35, 0]} castShadow>
-          <boxGeometry args={[0.24, 0.7, 0.3]} />
-          <meshStandardMaterial color="#47505c" />
-        </mesh>
-      ))}
-      {[-0.45, 0.45].map((x) => (
-        <mesh key={x} position={[x, 1.04, 0]} castShadow>
-          <boxGeometry args={[0.18, 0.8, 0.24]} />
-          <meshStandardMaterial
-            color={
-              visitor.category === "ecology"
-                ? "#668459"
-                : visitor.category === "education"
-                  ? "#866c9b"
-                  : visitor.category === "energy"
-                    ? "#658398"
-                    : "#b8834c"
-            }
-          />
-        </mesh>
-      ))}
-      <Html center position={[0, 2.5, 0]}>
-        <span className="world-label">{visitor.name}</span>
-      </Html>
-    </group>
+    <>
+      <RigidBody
+        ref={collider}
+        type="kinematicPosition"
+        colliders={false}
+        position={[0, 1, 16]}
+      >
+        <CapsuleCollider args={[0.6, 0.32]} />
+      </RigidBody>
+      <group ref={body}>
+        <CitizenModel moving={() => walking.current} color="#b8834c" />
+        <WorldLabel center position={[0, 2.5, 0]}>
+          <span className="world-label">{visitor.name}</span>
+        </WorldLabel>
+      </group>
+    </>
   );
 }

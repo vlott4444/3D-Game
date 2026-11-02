@@ -2,7 +2,7 @@ import { buildings, townColliders, type Box } from "./Town.js";
 import { getDb } from "../database/db.js";
 export type PhysicalItem = {
   id: string;
-  kind: "ball" | "crate";
+  kind: "ball";
   x: number;
   y: number;
   z: number;
@@ -22,14 +22,14 @@ export type PhysicalPlayer = {
   dz?: number;
 };
 type Saved = { id: string; state: string };
-const radius = (item: PhysicalItem) => (item.kind === "ball" ? 0.38 : 0.48);
+const radius = (_item: PhysicalItem) => 0.38;
 function initialItems(): PhysicalItem[] {
-  return Array.from({ length: 10 }, (_, i) => ({
+  return Array.from({ length: 5 }, (_, i) => ({
     id: `town-item-${i}`,
-    kind: i < 5 ? "ball" : "crate",
-    x: i < 5 ? 4 + i * 1.2 : 9 + (i - 5) * 1.3,
-    y: i < 5 ? 0.38 : 0.48,
-    z: i < 5 ? 18 : 20,
+    kind: "ball",
+    x: 4 + i * 1.2,
+    y: 0.38,
+    z: 18,
     vx: 0,
     vy: 0,
     vz: 0,
@@ -40,7 +40,8 @@ export class InteractiveWorld {
   doors = new Set<string>();
   private players = new Map<string, PhysicalPlayer[]>();
   private cooldown = new Map<string, number>();
-  private last = 0;
+  private last: number | undefined;
+  private accumulator = 0;
   private lastSave = 0;
   private persisted = new Map<string, string>();
   constructor(
@@ -182,16 +183,19 @@ export class InteractiveWorld {
     return action === "throw" ? "Предмет брошен" : "Предмет положен";
   }
   update(now: number) {
-    if (!this.last) {
+    if (this.last === undefined) {
       this.last = now;
       return;
     }
-    if (now - this.last < 40) return;
-    const dt = Math.min(0.15, (now - this.last) / 1000);
-    this.last = now;
+    // Shared across rooms: the second room's call cannot advance the clock twice.
+    this.accumulator += Math.max(0, Math.min(0.25, (now - this.last) / 1000));
+    this.last = Math.max(this.last, now);
     const players = [...this.players.values()].flat(),
       boxes = townColliders(this.doors);
-    for (let sub = 0; sub < 3; sub++) this.step(players, boxes, dt / 3);
+    while (this.accumulator + 1e-9 >= 1 / 60) {
+      this.step(players, boxes, 1 / 60);
+      this.accumulator -= 1 / 60;
+    }
     if (now - this.lastSave > 1000) {
       this.lastSave = now;
       for (const item of this.items)
@@ -289,6 +293,7 @@ export class InteractiveWorld {
       Math.abs(Math.floor(p.x / 64) - Math.floor(player.x / 64)) <= 1 &&
       Math.abs(Math.floor(p.z / 64) - Math.floor(player.z / 64)) <= 1;
     return {
+      serverTime: Date.now(),
       items: this.items.filter(near).map((o) => ({ ...o })),
       doors: buildings
         .filter(near)

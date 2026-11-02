@@ -1,3 +1,4 @@
+import { useWorldCache } from "./network/useWorldCache";
 import GameHUD from "./ui/GameHUD";
 import { AdminPanel } from "./ui/AdminPanel";
 import { useEffect, useState } from "react";
@@ -28,6 +29,7 @@ export default function App() {
   const [ambientCount, setAmbientCount] = useState(0);
   const [feedback, setFeedback] = useState("");
   const council = useCouncilTurn(room);
+  const cache = useWorldCache(room);
   const ActiveDialogue =
     dialogueTarget !== "all" && dialogueTarget !== "players"
       ? PrivateDialoguePanel
@@ -226,6 +228,7 @@ export default function App() {
         saved={saved}
         chunks={chunkCount}
         npcs={ambientCount}
+        cache={cache}
         isAdmin={isAdmin}
         dialogue={open}
         onCouncil={() => openChat("all")}

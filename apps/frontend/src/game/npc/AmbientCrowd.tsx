@@ -1,7 +1,10 @@
+import WorldLabel from "../WorldLabel";
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+
 import { Color, InstancedMesh, Object3D } from "three";
+import { CapsuleCollider, RigidBody, type RapierRigidBody } from "@react-three/rapier";
+import CitizenModel from "./CitizenModel";
 import type { GameRoom } from "../../network/GameConnection";
 type Actor = {
   id: string;
@@ -26,21 +29,21 @@ const parts: Part[] = [
     name: "torso",
     kind: "human",
     offset: [0, 1.12, 0],
-    size: [0.65, 0.8, 0.35],
+    size: [0.48, 0.8, 0.32],
     color: "#ffffff",
   },
   {
     name: "head",
     kind: "human",
     offset: [0, 1.78, 0],
-    size: [0.42, 0.42, 0.42],
+    size: [0.28, 0.33, 0.29],
     color: "#dfbd9d",
   },
   ...[-1, 1].flatMap((side): Part[] => [
     {
       name: `arm${side}`,
       kind: "human",
-      offset: [side * 0.42, 1.05, 0],
+      offset: [side * 0.31, 1.05, 0],
       size: [0.17, 0.65, 0.2],
       color: "#637f7a",
       leg: side,
@@ -107,8 +110,56 @@ const parts: Part[] = [
   ]),
 ];
 const palette = ["#477a80", "#b48a56", "#776486", "#526d55", "#b06a55", "#82949b"];
+function NearCitizen({
+  actor,
+  pose,
+  detailed,
+}: {
+  actor: Actor;
+  detailed: boolean;
+  pose: { current: Map<string, { x: number; z: number; rotY: number }> };
+}) {
+  const body = useRef<RapierRigidBody>(null);
+  const speed = useRef(false);
+  const initial = useRef<[number, number, number]>([actor.x, 0, actor.z]);
+  const last = useRef({ x: actor.x, z: actor.z });
+  useFrame((_, dt) => {
+    const p = pose.current.get(actor.id) || actor;
+    speed.current =
+      Math.hypot(p.x - last.current.x, p.z - last.current.z) / Math.max(dt, 0.001) > 0.08;
+    last.current = { x: p.x, z: p.z };
+    body.current?.setNextKinematicTranslation({ x: p.x, y: 0, z: p.z });
+    body.current?.setNextKinematicRotation({
+      x: 0,
+      y: Math.sin(p.rotY / 2),
+      z: 0,
+      w: Math.cos(p.rotY / 2),
+    });
+  });
+  let hash = 0;
+  for (const ch of actor.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return (
+    <RigidBody
+      ref={body}
+      type="kinematicPosition"
+      colliders={false}
+      position={initial.current}
+      friction={0}
+    >
+      <CapsuleCollider args={[0.6, 0.32]} position={[0, 0.95, 0]} />
+      {detailed && (
+        <CitizenModel
+          moving={() => speed.current}
+          color={palette[hash % palette.length]}
+        />
+      )}
+    </RigidBody>
+  );
+}
 export default function AmbientCrowd({ room }: { room: GameRoom }) {
   const [snapshot, setSnapshot] = useState<Snapshot>({ actors: [], food: [] });
+  const [near, setNear] = useState<string[]>([]);
+  const nextLod = useRef(0);
   const meshes = useRef<Record<string, InstancedMesh | null>>({});
   const current = useRef(new Map<string, { x: number; z: number; rotY: number }>());
   const dummy = useRef(new Object3D());
@@ -131,6 +182,24 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
     return off;
   }, [room]);
   useFrame(({ clock, camera }, dt) => {
+    if (clock.elapsedTime > nextLod.current) {
+      nextLod.current = clock.elapsedTime + 0.4;
+      const next = snapshot.actors
+        .filter(
+          (a) =>
+            a.kind === "human" &&
+            Math.hypot(a.x - camera.position.x, a.z - camera.position.z) < 26,
+        )
+        .sort(
+          (a, b) =>
+            Number(b.mode === "guide") - Number(a.mode === "guide") ||
+            Math.hypot(a.x - camera.position.x, a.z - camera.position.z) -
+              Math.hypot(b.x - camera.position.x, b.z - camera.position.z),
+        )
+        .slice(0, 18)
+        .map((a) => a.id);
+      setNear((old) => (old.join() === next.join() ? old : next));
+    }
     const groups = { human: [] as Actor[], deer: [] as Actor[] };
     for (const actor of snapshot.actors) {
       let pose = current.current.get(actor.id);
@@ -157,6 +226,8 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
           s = Math.sin(pose.rotY);
         const [ox, oy, oz] = part.offset;
         const moving =
+          (actor.mode === "guide" &&
+            Math.hypot(actor.x - pose.x, actor.z - pose.z) > 0.025) ||
           actor.mode === "wander" ||
           actor.mode === "flee" ||
           (actor.mode === "eat" && Math.hypot(actor.x - pose.x, actor.z - pose.z) > 0.15);
@@ -176,8 +247,10 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
           0,
         );
         const hidden =
-          part.detail &&
-          Math.hypot(camera.position.x - pose.x, camera.position.z - pose.z) > 45;
+          (actor.kind === "human" && near.includes(actor.id)) ||
+          (part.detail &&
+            actor.kind === "deer" &&
+            Math.hypot(camera.position.x - pose.x, camera.position.z - pose.z) > 45);
         dummy.current.scale.set(
           ...(hidden ? ([0, 0, 0] as [number, number, number]) : part.size),
         );
@@ -198,6 +271,16 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
   });
   return (
     <>
+      {snapshot.actors
+        .filter((a) => a.kind === "human")
+        .map((actor) => (
+          <NearCitizen
+            key={actor.id}
+            actor={actor}
+            pose={current}
+            detailed={near.includes(actor.id)}
+          />
+        ))}
       {parts.map((part) => (
         <instancedMesh
           key={part.name}
@@ -206,7 +289,7 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
           }}
           args={[undefined, undefined, 162]}
         >
-          <boxGeometry args={[1, 1, 1]} />
+          <sphereGeometry args={[0.58, 8, 6]} />
           <meshStandardMaterial color={part.color} roughness={1} />
         </instancedMesh>
       ))}
@@ -225,14 +308,14 @@ export default function AmbientCrowd({ room }: { room: GameRoom }) {
       {snapshot.actors
         .filter((actor) => actor.mode === "guide")
         .map((actor) => (
-          <Html
+          <WorldLabel
             key={`guide:${actor.id}`}
             center
             position={[actor.x, 2.6, actor.z]}
             distanceFactor={10}
           >
             <span className="town-label">Смотритель · иди за мной</span>
-          </Html>
+          </WorldLabel>
         ))}
     </>
   );

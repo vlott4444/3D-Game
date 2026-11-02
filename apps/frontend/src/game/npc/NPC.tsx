@@ -1,4 +1,5 @@
-import { Html } from "@react-three/drei";
+import WorldLabel from "../WorldLabel";
+
 import { RigidBody, CylinderCollider } from "@react-three/rapier";
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -53,9 +54,21 @@ export default function NPC({
     color: string,
   ) {
     return (
+      <mesh position={position} scale={size} castShadow receiveShadow>
+        <sphereGeometry args={[0.5, 12, 8]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+    );
+  }
+  function furniture(
+    position: [number, number, number],
+    size: [number, number, number],
+    color: string,
+  ) {
+    return (
       <mesh position={position} castShadow receiveShadow>
         <boxGeometry args={size} />
-        <meshStandardMaterial color={color} />
+        <meshStandardMaterial color={color} roughness={0.8} />
       </mesh>
     );
   }
@@ -67,13 +80,13 @@ export default function NPC({
       rotation={[0, portrait ? 0 : facing, 0]}
     >
       {!portrait && <CylinderCollider args={[1, 0.65]} position={[0, 1, 0]} />}
-      {!portrait && box([0, 0.62, 0], [1.15, 0.18, 1.05], "#715238")}
-      {!portrait && box([0, 1.2, -0.48], [1.15, 1.25, 0.16], "#715238")}
+      {!portrait && furniture([0, 0.62, 0], [1.15, 0.18, 1.05], "#715238")}
+      {!portrait && furniture([0, 1.2, -0.48], [1.15, 1.25, 0.16], "#715238")}
       {!portrait &&
         [-0.45, 0.45].flatMap((x) =>
           [-0.4, 0.4].map((z) => (
             <group key={`${x}:${z}`}>
-              {box([x, 0.3, z], [0.12, 0.6, 0.12], "#4f3b2b")}
+              {furniture([x, 0.3, z], [0.12, 0.6, 0.12], "#4f3b2b")}
             </group>
           )),
         )}
@@ -127,6 +140,34 @@ export default function NPC({
           <sphereGeometry args={[0.34, 12, 10]} />
           <meshStandardMaterial color={person.hair} />
         </mesh>
+        <mesh position={[0, -0.045, 0.31]} scale={[0.07, 0.1, 0.1]}>
+          <sphereGeometry args={[1, 8, 6]} />
+          <meshStandardMaterial color="#d7ac89" />
+        </mesh>
+        {[-1, 1].map((side) => (
+          <mesh
+            key={`ear${side}`}
+            position={[side * 0.31, -0.03, 0]}
+            scale={[0.07, 0.11, 0.07]}
+          >
+            <sphereGeometry args={[1, 8, 6]} />
+            <meshStandardMaterial color="#d7ac89" />
+          </mesh>
+        ))}
+        {person.id === "einstein" &&
+          [-1, 1].flatMap((side) =>
+            [0, 1, 2].map((i) => (
+              <mesh
+                key={`${side}${i}`}
+                position={[side * (0.29 + i * 0.025), 0.12 + i * 0.075, -0.03]}
+                scale={[0.15, 0.1, 0.18]}
+                rotation={[0, 0, side * 0.35]}
+              >
+                <sphereGeometry args={[1, 8, 6]} />
+                <meshStandardMaterial color="#ece9dc" />
+              </mesh>
+            )),
+          )}
         {[-0.12, 0.12].map((x) => (
           <mesh key={x} position={[x, 0, 0.29]}>
             <sphereGeometry args={[0.035, 6, 6]} />
@@ -142,7 +183,7 @@ export default function NPC({
         )}
       </group>
       {!portrait && (
-        <Html position={[0, 2.5, 0]} center distanceFactor={16}>
+        <WorldLabel position={[0, 2.5, 0]} center distanceFactor={16}>
           <span
             style={{
               display: "block",
@@ -161,7 +202,7 @@ export default function NPC({
               {speaking ? "Готовит ответ…" : person.title}
             </small>
           </span>
-        </Html>
+        </WorldLabel>
       )}
     </RigidBody>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+import { SceneOverlay } from "../WorldLabel";
 import type { RapierRigidBody } from "@react-three/rapier";
 import type { GameRoom } from "../../network/GameConnection";
 import { useObjects, type ObjectState } from "../../network/InteractiveState";
@@ -41,7 +41,7 @@ export default function ObjectInteraction({
           next = {
             action: "pickup",
             id: item.id,
-            label: item.kind === "ball" ? "R — взять мяч" : "R — взять ящик",
+            label: "R — взять мяч",
           };
         }
       }
@@ -107,8 +107,8 @@ export default function ObjectInteraction({
     return () => window.removeEventListener("keydown", key);
   }, [room]);
   return label ? (
-    <Html fullscreen style={{ pointerEvents: "none" }}>
+    <SceneOverlay>
       <div className="object-hint">{label}</div>
-    </Html>
+    </SceneOverlay>
   ) : null;
 }

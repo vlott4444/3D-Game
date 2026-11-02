@@ -16,7 +16,10 @@
     "test": "mocha -r tsx test/**.test.ts --exit --timeout 15000",
     "typecheck": "tsc --noEmit",
     "agent:chat": "tsx src/agents/scripts/chat.ts",
-    "serve": "node build/index.js"
+    "serve": "node build/index.js",
+    "world:catalog": "tsx scripts/world-catalog.mts",
+    "prestart": "npm run world:catalog -- --check",
+    "prebuild": "npm run world:catalog -- --check"
   },
   "author": "",
   "license": "UNLICENSED",

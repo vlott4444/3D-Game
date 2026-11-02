@@ -1,4 +1,5 @@
 export default function GameHUD({
+  cache,
   online,
   saved,
   chunks,
@@ -13,6 +14,7 @@ export default function GameHUD({
   onHall,
   onLogout,
 }: {
+  cache: { usedBytes: number; totalBytes: number; ratio: number } | null;
   online: boolean;
   saved: string;
   chunks: number;
@@ -45,6 +47,14 @@ export default function GameHUD({
         <span>{npcs} NPC</span>
       </div>
       <p className="hud-saved">{saved}</p>
+      {cache && (
+        <small
+          className="hud-cache"
+          title={`${cache.usedBytes.toLocaleString()} / ${cache.totalBytes.toLocaleString()} байт. Общие модели + резерв динамики + два буфера чанков.`}
+        >
+          Данные мира: {(cache.ratio * 100).toFixed(2)}% / 10%
+        </small>
+      )}
       <nav className="hud-grid" aria-label="Действия игрока">
         <button disabled={!online} onClick={onCouncil}>
           Совет <kbd>C</kbd>

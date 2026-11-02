@@ -5,3 +5,7 @@ data
 preview-data
 package-lock.json
 *.gguf
+
+# Generated files are checked by world-catalog.mts. Preserve the merged player source.
+**/WorldCatalog.generated.ts
+apps/frontend/src/game/Player.tsx

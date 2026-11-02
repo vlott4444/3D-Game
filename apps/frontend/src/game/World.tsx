@@ -1,3 +1,7 @@
+import Meadow from "./world/Meadow";
+import type { Decoration } from "./world/VillageAssets";
+import { ForestFloor } from "./world/ForestFloor";
+import { validSnapshot } from "../network/WorldCache";
 import Town, { type Building, type Path } from "./world/Town";
 import InteractiveObjects from "./world/InteractiveObjects";
 import { useEffect, useMemo, useRef, useLayoutEffect, useState } from "react";
@@ -13,7 +17,7 @@ type Chunk = {
   cz: number;
   objects: WorldObject[];
   edits?: WorldEdit[];
-  town?: { buildings: Building[]; paths: Path[] };
+  town?: { buildings: Building[]; paths: Path[]; decor?: Decoration[] };
 };
 type Snapshot = { chunkSize: number; chunks: Chunk[] };
 const SIZE = 64;
@@ -62,7 +66,7 @@ function Grove({ objects }: { objects: WorldObject[] }) {
       mesh.computeBoundingSphere();
     }
     place(trunk.current, trees, 1);
-    place(leaves.current, trees, 3);
+    place(leaves.current, trees, 3.6, 1.35);
     place(rock.current, rocks, 0.3, 0.65);
   }, [trees, rocks]);
   return (
@@ -72,8 +76,8 @@ function Grove({ objects }: { objects: WorldObject[] }) {
         <meshStandardMaterial color="#695339" />
       </instancedMesh>
       <instancedMesh ref={leaves} args={[undefined, undefined, trees.length]} castShadow>
-        <coneGeometry args={[1.6, 3.2, 7]} />
-        <meshStandardMaterial color="#4d795b" />
+        <icosahedronGeometry args={[1.7, 1]} />
+        <meshStandardMaterial color="#466b4b" />
       </instancedMesh>
       <instancedMesh ref={rock} args={[undefined, undefined, rocks.length]}>
         <dodecahedronGeometry args={[0.8, 0]} />
@@ -97,12 +101,20 @@ export default function World({
   const [snapshot, setSnapshot] = useState(() => bootstrap(initialPose.x, initialPose.z));
   useEffect(() => {
     const off = room.onMessage("world_snapshot", (data: Snapshot) => {
-      if (data.chunkSize !== SIZE || data.chunks.length > 9) return;
+      if (!validSnapshot(data)) return;
       setSnapshot(data);
     });
     room.send("world_request", {});
     return off;
   }, [room]);
+  const town = useMemo(
+    () => ({
+      buildings: snapshot.chunks.flatMap((c) => c.town?.buildings || []),
+      paths: snapshot.chunks.flatMap((c) => c.town?.paths || []),
+      decor: snapshot.chunks.flatMap((c) => c.town?.decor || []),
+    }),
+    [snapshot],
+  );
   const objects = useMemo(() => snapshot.chunks.flatMap((c) => c.objects), [snapshot]);
   return (
     <>
@@ -117,7 +129,7 @@ export default function World({
             receiveShadow
           >
             <boxGeometry args={[SIZE, 0.3, SIZE]} />
-            <meshStandardMaterial color="#8d9c76" roughness={1} />
+            <ForestFloor />
           </mesh>
         </RigidBody>
       ))}
@@ -125,9 +137,11 @@ export default function World({
       <Hall />
       <Town
         room={room}
-        buildings={snapshot.chunks.flatMap((c) => c.town?.buildings || [])}
-        paths={snapshot.chunks.flatMap((c) => c.town?.paths || [])}
+        buildings={town.buildings}
+        paths={town.paths}
+        decor={town.decor}
       />
+      <Meadow buildings={town.buildings} paths={town.paths} />
       <InteractiveObjects room={room} />
       <WorldChanges edits={snapshot.chunks.flatMap((chunk) => chunk.edits || [])} />
     </>

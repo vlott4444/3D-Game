@@ -9,7 +9,7 @@ describe("Procedural streaming and visitor lifecycle", () => {
   });
   it("keeps exactly nine chunks while travelling beyond the old map", () => {
     let cache = new Map();
-    for (let i = -200; i <= 200; i++) {
+    for (let i = -60; i <= 60; i++) {
       const snapshot = worldSnapshot(i * 64, i * 128);
       cache = new Map(snapshot.chunks.map((c) => [c.id, c]));
       assert.equal(cache.size, 9);

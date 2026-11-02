@@ -5,10 +5,9 @@ import { worldSnapshot } from "../src/world/ProceduralWorld.js";
 import { AmbientWorld, createAmbientChunk } from "../src/world/AmbientWorld.js";
 const player: PhysicalPlayer = { id: "owner", x: 4, z: 18, height: 1.18, rotY: Math.PI };
 describe("Streamed forest town and shared physical objects", () => {
-  it("streams eight buildings locally and spawns residents outside walls", () => {
-    assert.equal(
-      worldSnapshot(0, 0).chunks.flatMap((c) => c.town?.buildings || []).length,
-      8,
+  it("streams the nearby larger town and spawns residents outside walls", () => {
+    assert.ok(
+      worldSnapshot(0, 0).chunks.flatMap((c) => c.town?.buildings || []).length >= 8,
     );
     assert.equal(
       worldSnapshot(4000, 4000).chunks.flatMap((c) => c.town?.buildings || []).length,

@@ -9,8 +9,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "format": "prettier --write \"apps/**/*.{ts,tsx,js,mjs,cjs,json,css}\" \"*.json\" \".vscode/*.json\"",
-    "format:check": "prettier --check \"apps/**/*.{ts,tsx,js,mjs,cjs,json,css}\" \"*.json\" \".vscode/*.json\""
+    "format": "prettier --write \"apps/**/*.{ts,tsx,js,mjs,cjs,mts,json,css}\" \"*.json\" \".vscode/*.json\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,js,mjs,cjs,mts,json,css}\" \"*.json\" \".vscode/*.json\""
   },
   "engines": {
     "node": ">= 22.0.0"

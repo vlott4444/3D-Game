@@ -1,5 +1,8 @@
+import { VillageRoof } from "./world/VillageAssets";
+import { Surface, GableInfill, Beam, WindowFrame, Lantern } from "./world/Architecture";
+import WorldLabel, { labelOccluder } from "./WorldLabel";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Html } from "@react-three/drei";
+
 import DeskArrow from "./DeskArrow";
 function Block({
   position,
@@ -13,9 +16,9 @@ function Block({
   solid?: boolean;
 }) {
   const mesh = (
-    <mesh position={position} receiveShadow castShadow>
+    <mesh ref={labelOccluder} position={position} receiveShadow castShadow>
       <boxGeometry args={size} />
-      <meshStandardMaterial color={color} roughness={0.8} />
+      <Surface kind="plaster" color={color} />
     </mesh>
   );
   return solid ? (
@@ -34,6 +37,67 @@ export default function Hall() {
   return (
     <group>
       <DeskArrow />
+      <VillageRoof width={28} depth={28} y={5.3} />
+      <GableInfill width={28} depth={28} y={5.3} height={28 * 0.27} />
+      <group position={[0, 8.5, 14.08]} ref={labelOccluder}>
+        <mesh>
+          <circleGeometry args={[1.05, 32]} />
+          <meshStandardMaterial color="#718e87" metalness={0.2} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0, 0.02]}>
+          <torusGeometry args={[1.08, 0.09, 8, 48]} />
+          <meshStandardMaterial color="#d7c398" />
+        </mesh>
+        {[0, 1, 2, 3].map((i) => (
+          <Beam
+            key={i}
+            p={[0, 0, 0.04]}
+            s={[2, 0.055, 0.07]}
+            rotation={(i * Math.PI) / 4}
+            color="#e4d7b8"
+          />
+        ))}
+      </group>
+      <Beam p={[0, 5.55, 14.05]} s={[27, 0.22, 0.24]} />
+
+      {[-1, 1].map((side) => (
+        <group key={`facade${side}`}>
+          {[-10, -5, 2, 9].map((z) => (
+            <group
+              key={z}
+              position={[side * 14.32, 2.6, z]}
+              rotation={[0, (side * Math.PI) / 2, 0]}
+            >
+              <WindowFrame x={0} z={0} y={0} scale={1.45} />
+            </group>
+          ))}
+          <Beam p={[side * 9, 0.5, 13.4]} s={[10, 0.7, 0.9]} color="#aaa28b" />
+          <Beam p={[side * 9, 4.8, 13.4]} s={[10, 0.35, 0.8]} color="#655640" />
+          {[5, 12].map((x) => (
+            <group key={x} position={[side * x, 0, 13.6]} ref={labelOccluder}>
+              <mesh position={[0, 2.5, 0]} castShadow>
+                <cylinderGeometry args={[0.3, 0.4, 5, 16]} />
+                <Surface kind="plaster" color="#e0d6bb" />
+              </mesh>
+              <mesh position={[0, 0.22, 0]}>
+                <cylinderGeometry args={[0.58, 0.64, 0.44, 16]} />
+                <Surface kind="stone" />
+              </mesh>
+              <mesh position={[0, 4.9, 0]}>
+                <cylinderGeometry args={[0.62, 0.42, 0.3, 16]} />
+                <Surface kind="plaster" color="#e4d6b5" />
+              </mesh>
+            </group>
+          ))}
+          <Lantern p={[side * 4.6, 3.4, 14]} />
+        </group>
+      ))}
+      <Beam p={[0, 5.4, 13.7]} s={[29, 0.4, 0.85]} color="#66583f" />
+      <Beam p={[0, 5.5, -14]} s={[28, 0.4, 0.7]} />
+      {[-1, 1].map((side) => (
+        <Beam key={side} p={[side * 14, 5.45, -0.5]} s={[0.5, 0.4, 28]} />
+      ))}
+
       <Block position={[0, -0.08, -0.5]} size={[28, 0.2, 27]} color="#ddd1b4" />
       <Block position={[-14, 2.6, -0.5]} size={[0.5, 5.2, 27]} color="#c5bda8" />
       <Block position={[14, 2.6, -0.5]} size={[0.5, 5.2, 27]} color="#c5bda8" />
@@ -68,6 +132,14 @@ export default function Hall() {
           <meshStandardMaterial color="#765436" />
         </mesh>
       </RigidBody>
+      <mesh position={[0, 1.055, -2.5]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[2.05, 0.025, 6, 64]} />
+        <meshStandardMaterial color="#c49e64" metalness={0.3} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.45, -2.5]} castShadow>
+        <cylinderGeometry args={[0.55, 0.9, 0.85, 16]} />
+        <meshStandardMaterial color="#674d35" />
+      </mesh>
       <Block position={[0, 0.45, -2.5]} size={[0.8, 0.9, 0.8]} color="#4e4030" />
       {[-9, 9].map((x) => (
         <group key={x}>
@@ -92,7 +164,7 @@ export default function Hall() {
           ))}
         </group>
       ))}
-      <Html position={[0, 4.1, -13.6]} center transform>
+      <WorldLabel position={[0, 4.5, -13.6]} distanceFactor={16} center transform>
         <div
           style={{
             color: "#f2deb4",
@@ -104,7 +176,7 @@ export default function Hall() {
         >
           ЗАЛ ШЕСТИ МУДРЕЦОВ
         </div>
-      </Html>
+      </WorldLabel>
       <pointLight position={[0, 4, -2.5]} intensity={45} color="#ffe2a9" distance={24} />
       <Block
         position={[0, -0.05, 17]}

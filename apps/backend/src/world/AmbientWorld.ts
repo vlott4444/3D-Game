@@ -1,5 +1,12 @@
 import { townBlocked } from "./Town.js";
-import { chunkAt, generateChunk, CHUNK_SIZE, groveObjects } from "./ProceduralWorld.js";
+import {
+  chunkAt,
+  generateChunk,
+  CHUNK_SIZE,
+  groveObjects,
+  MIN_CHUNK,
+  MAX_CHUNK,
+} from "./ProceduralWorld.js";
 export type AmbientMode = "wander" | "look" | "yield" | "flee" | "eat" | "guide";
 export type AmbientActor = {
   id: string;
@@ -75,7 +82,7 @@ export function createAmbientChunk(cx: number, cz: number): AmbientActor[] {
     }
     actors.push({
       id: `${cx}:${cz}:${i}`,
-      kind: i % 3 === 0 ? "deer" : "human",
+      kind: i % 3 === 0 && (Math.abs(x) > 60 || z > 80 || z < -40) ? "deer" : "human",
       x,
       z,
       homeX: x,
@@ -98,6 +105,15 @@ export function stepAmbientActor(
   dt: number,
   blocked: (x: number, z: number) => boolean = insideHall,
 ) {
+  const terrainBlocked = blocked;
+  blocked = (x, z) =>
+    terrainBlocked(x, z) ||
+    (actor.kind === "human" &&
+      players.some((p) => {
+        const next = Math.hypot(x - p.x, z - p.z),
+          current = Math.hypot(actor.x - p.x, actor.z - p.z);
+        return next < 0.78 && next < current && current > 0.01;
+      }));
   let nearest: AmbientPlayer | undefined;
   let distance = Infinity;
   for (const player of players) {
@@ -217,6 +233,8 @@ export class AmbientWorld {
           const cx = c.cx + dx,
             cz = c.cz + dz,
             key = `${cx}:${cz}`;
+          if (cx < MIN_CHUNK || cx > MAX_CHUNK || cz < MIN_CHUNK || cz > MAX_CHUNK)
+            continue;
           active.add(key);
           if (!this.chunks.has(key)) {
             this.chunks.set(key, createAmbientChunk(cx, cz));

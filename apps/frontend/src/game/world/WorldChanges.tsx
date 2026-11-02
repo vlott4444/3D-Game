@@ -1,4 +1,5 @@
-import { Html } from "@react-three/drei";
+import WorldLabel from "../WorldLabel";
+
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 export type WorldEdit = {
   kind: "board" | "benches" | "water" | "garden";
@@ -45,9 +46,9 @@ export default function WorldChanges({ edits }: { edits: WorldEdit[] }) {
                   color="#785c3e"
                 />
               ))}
-              <Html center position={[0, 2.6, 0]}>
+              <WorldLabel center position={[0, 2.6, 0]}>
                 <span className="world-label">Доска идей</span>
-              </Html>
+              </WorldLabel>
               {[-0.65, 0, 0.65].map((x) => (
                 <Box
                   key={x}
@@ -87,9 +88,9 @@ export default function WorldChanges({ edits }: { edits: WorldEdit[] }) {
                 <cylinderGeometry args={[0.04, 0.04, 1, 6]} />
                 <meshStandardMaterial color="#90cbd1" transparent opacity={0.7} />
               </mesh>
-              <Html center position={[0, 2.3, 0]}>
+              <WorldLabel center position={[0, 2.3, 0]}>
                 <span className="world-label">Питьевой пункт</span>
-              </Html>
+              </WorldLabel>
             </>
           )}
           {edit.kind === "garden" && (
@@ -107,9 +108,9 @@ export default function WorldChanges({ edits }: { edits: WorldEdit[] }) {
                   </mesh>
                 </group>
               ))}
-              <Html center position={[0, 1.8, 0]}>
+              <WorldLabel center position={[0, 1.8, 0]}>
                 <span className="world-label">Общий сад</span>
-              </Html>
+              </WorldLabel>
             </>
           )}
         </RigidBody>

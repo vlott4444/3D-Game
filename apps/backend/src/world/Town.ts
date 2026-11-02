@@ -46,6 +46,80 @@ export const buildings: TownBuilding[] = [
     roof: "#8a604b",
   },
 ];
+// Two outer streets and a northern residential quarter extend the walkable town.
+buildings.push(
+  ...[-1, 1].flatMap((side) =>
+    [-64, -34, 0, 34, 68, 108].map((z, i) => ({
+      id: `quarter-${side}-${i}`,
+      name: [
+        "Дом переплётчика",
+        "Гостевой дом",
+        "Дом аптекаря",
+        "Дом картографа",
+        "Дом музыканта",
+        "Дом лесничего",
+      ][i],
+      kind: "house" as const,
+      x: side * 76,
+      z,
+      width: i % 2 ? 10 : 8,
+      depth: 9,
+      color: i % 2 ? "#e2d5ba" : "#cbd5c4",
+      roof: "#816451",
+    })),
+  ),
+  ...[-1, 1].map((side) => ({
+    id: `library-${side}`,
+    name: side < 0 ? "Читальня" : "Школа ремёсел",
+    kind: "school" as const,
+    x: side * 27,
+    z: -65,
+    width: 12,
+    depth: 10,
+    color: "#dcc9a3",
+    roof: "#667c76",
+  })),
+);
+export type TownDecoration = {
+  id: string;
+  kind: "bench" | "pine" | "pond";
+  x: number;
+  z: number;
+  rotY: number;
+};
+export const decorations: TownDecoration[] = [
+  ...[-1, 1].flatMap((side) =>
+    [26, 44, 62].map((z) => ({
+      id: `bench-${side}-${z}`,
+      kind: "bench" as const,
+      x: side * 7,
+      z,
+      rotY: (side * Math.PI) / 2,
+    })),
+  ),
+  ...[-1, 1].flatMap((side) =>
+    [-40, -10, 20, 50, 80, 120].map((z) => ({
+      id: `pine-${side}-${z}`,
+      kind: "pine" as const,
+      x: side * 56,
+      z,
+      rotY: z,
+    })),
+  ),
+  { id: "pond", kind: "pond", x: 30, z: 91, rotY: 0 },
+  { id: "pond-bench", kind: "bench", x: 21, z: 94, rotY: Math.PI / 2 },
+];
+decorations.push(
+  ...[-1, 1].flatMap((side) =>
+    [40, 76, 98, -36].map((z) => ({
+      id: `square-pine-${side}-${z}`,
+      kind: "pine" as const,
+      x: side * 16,
+      z,
+      rotY: z,
+    })),
+  ),
+);
 export type TownPath = { x: number; z: number; width: number; depth: number };
 export const paths: TownPath[] = [
   { x: -26, z: 10, width: 5, depth: 102 },
@@ -62,6 +136,12 @@ export const paths: TownPath[] = [
 ];
 export type Box = { x: number; z: number; hx: number; hz: number };
 export function townBlocked(x: number, z: number, padding = 0.8) {
+  if (
+    decorations.some(
+      (d) => d.kind === "pond" && Math.hypot(x - d.x, z - d.z) < 8 + padding,
+    )
+  )
+    return true;
   return buildings.some(
     (b) =>
       Math.abs(x - b.x) < b.width / 2 + padding &&
@@ -91,8 +171,26 @@ export function townColliders(openDoors: Set<string> = new Set()): Box[] {
   }
   return result;
 }
+paths.push(
+  { x: -62, z: 26, width: 4, depth: 192 },
+  { x: 62, z: 26, width: 4, depth: 192 },
+  { x: 0, z: -49, width: 128, depth: 5 },
+  { x: 0, z: 120, width: 130, depth: 5 },
+  ...[-1, 1].flatMap((side) =>
+    [-64, -34, 0, 34, 68, 108].map((z) => ({
+      x: side * 70,
+      z: z + 5,
+      width: 19,
+      depth: 3,
+    })),
+  ),
+);
 export function townChunk(cx: number, cz: number) {
   const inside = (item: { x: number; z: number }) =>
     Math.floor(item.x / 64) === cx && Math.floor(item.z / 64) === cz;
-  return { buildings: buildings.filter(inside), paths: paths.filter(inside) };
+  return {
+    buildings: buildings.filter(inside),
+    paths: paths.filter(inside),
+    decor: decorations.filter(inside),
+  };
 }
